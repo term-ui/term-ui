@@ -146,10 +146,8 @@ const SegmentDisplay = ({
   );
 };
 const borderColor = "rgba(74, 0, 91, 0.5)";
-const borderColorDarker =
-  "rgba(74, 0, 91, 1)";
-const borderColorLighter =
-  "rgba(74, 0, 91, 0.1)";
+const borderColorDarker = "rgba(74, 0, 91, 1)";
+const borderColorLighter = "rgba(74, 0, 91, 0.1)";
 
 const displayBackgroundColor =
   "rgba(255, 255, 255, 0.2)";
@@ -495,8 +493,7 @@ const Calculator = () => {
       <term-view
         style={{
           padding: "1",
-          backgroundColor:
-            displayBackgroundColor,
+          backgroundColor: displayBackgroundColor,
           borderColor,
           borderStyle: "rounded",
           display: "flex",
