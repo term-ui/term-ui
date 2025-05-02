@@ -33,6 +33,9 @@ catalogs:
     react-dom:
       specifier: ^19.0.0
       version: 19.1.0
+    react-reconciler:
+      specifier: ^0.32.0
+      version: 0.32.0
     ts-dedent:
       specifier: ^2.2.0
       version: 2.2.0
@@ -89,6 +92,33 @@ importers:
         version: link:../../packages/shared
 
   examples/react-calculator:
+    dependencies:
+      '@term-ui/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@term-ui/dom':
+        specifier: workspace:*
+        version: link:../../packages/dom
+      '@term-ui/react':
+        specifier: workspace:*
+        version: link:../../packages/react
+      '@term-ui/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.1.2
+      react:
+        specifier: 'catalog:'
+        version: 19.1.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.19.4
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.3
+
+  examples/react-counter:
     dependencies:
       '@term-ui/core':
         specifier: workspace:*
@@ -183,6 +213,9 @@ importers:
       lodash-es:
         specifier: 'catalog:'
         version: 4.17.21
+      react-reconciler:
+        specifier: 'catalog:'
+        version: 0.32.0(react@19.1.0)
     devDependencies:
       '@term-ui/core':
         specifier: workspace:*
@@ -2846,6 +2879,12 @@ packages:
     peerDependenciesMeta:
       react-dom:
         optional: true
+
+  react-reconciler@0.32.0:
+    resolution: {integrity: sha512-2NPMOzgTlG0ZWdIf3qG+dcbLSoAc/uLfOwckc3ofy5sSK0pLJqnQLpUFxvGcN2rlXSjnVtGeeFLNimCQEj5gOQ==}
+    engines: {node: '>=0.10.0'}
+    peerDependencies:
+      react: ^19.1.0
 
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
@@ -6580,6 +6619,11 @@ snapshots:
       react: 19.1.0
     optionalDependencies:
       react-dom: 19.1.0(react@19.1.0)
+
+  react-reconciler@0.32.0(react@19.1.0):
+    dependencies:
+      react: 19.1.0
+      scheduler: 0.26.0
 
   react-refresh@0.17.0: {}
 

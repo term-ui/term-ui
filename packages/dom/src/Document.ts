@@ -81,7 +81,10 @@ export class Document {
     {
       writeStream,
       readStream,
-      size,
+      size = {
+        width: "100%",
+        height: "100%",
+      },
       clearScreenBeforePaint = true,
       reportLeaksOnExit = false,
       enableInputs = true,

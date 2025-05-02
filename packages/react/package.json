@@ -21,7 +21,8 @@
   "dependencies": {
     "@types/lodash-es": "catalog:",
     "@types/node": "catalog:",
-    "lodash-es": "catalog:"
+    "lodash-es": "catalog:",
+    "react-reconciler": "catalog:"
   },
   "publishConfig": {
     "access": "public"

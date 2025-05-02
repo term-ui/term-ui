@@ -1,5 +1,5 @@
 import { createContext, use } from "react";
-import type { TermUi } from "./TermUi";
+import type { TermUi } from "./TermUi.js";
 
 export const TermUiContext =
   createContext<TermUi | null>(null);
