@@ -206,6 +206,11 @@ Supported style properties:
 - `'px'` units are supported but treated as equivalent to 1 character cell (e.g., `width: '20px'` is the same as `width: 20`)
 ---
 
+## Examples
+
+Check out the [examples](https://github.com/yourusername/term-ui/tree/main/examples) directory for more complex examples and use cases.
+
+
 ## 🗺️ Roadmap
 
 Here are some features and improvements we're planning for future releases:

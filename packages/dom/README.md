@@ -91,46 +91,6 @@ const document = new Document(module, {
 });
 ```
 
-Methods:
-- `createElement(type: string)`: Create a new element
-- `render(force?: boolean)`: Render the document
-- `appendChild(element: Element)`: Add element to the document
-
-### Element
-
-Base class for all DOM elements.
-
-Methods:
-- `setStyle(cssString: string)`: Set multiple styles
-- `setStyleProperty(property: string, value: string)`: Set a single style property
-- `setText(text: string)`: Set element text content
-- `appendChild(child: Element)`: Add a child element
-- `addEventListener(event: string, callback: Function)`: Add an event listener
-
-Supported Events:
-- `click`: Mouse click
-- `mouse-enter`: Mouse enter
-- `mouse-leave`: Mouse leave
-
-### Styling
-
-Elements can be styled with CSS-like syntax:
-
-```typescript
-element.setStyle(`
-  color: red;
-  background-color: blue;
-  border-style: rounded;
-  padding: 1;
-  width: 50%;
-  height: 10;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-`);
-```
-
 ## Examples
 
 Check out the [examples](https://github.com/yourusername/term-ui/tree/main/examples) directory for more complex examples and use cases.
