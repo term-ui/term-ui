@@ -1,0 +1,14 @@
+{
+  "name": "@term-ui/dom-simple-button",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "pnpm tsx src/index.ts",
+    "dev": "pnpm tsx --watch src/index.ts"
+  },
+  "dependencies": {
+    "@term-ui/core": "workspace:*",
+    "@term-ui/dom": "workspace:*",
+    "@term-ui/shared": "workspace:*"
+  }
+}

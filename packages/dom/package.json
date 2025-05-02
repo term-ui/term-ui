@@ -1,0 +1,43 @@
+{
+  "name": "@term-ui/dom",
+  "version": "0.0.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "type": "module",
+  "keywords": [
+    "terminal",
+    "tui",
+    "dom",
+    "ui",
+    "cli",
+    "interactive",
+    "console"
+  ],
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/term-ui.git",
+    "directory": "packages/dom"
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@term-ui/core": "workspace:*",
+    "@term-ui/shared": "workspace:*",
+    "@types/bun": "latest"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch --preserveWatchOutput -p tsconfig.build.json",
+    "cleanup": "rm -rf dist"
+  },
+  "dependencies": {
+    "lodash-es": "catalog:"
+  }
+}

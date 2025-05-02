@@ -1,0 +1,27 @@
+packages:
+  - examples/*
+  - packages/*
+catalog:
+  "@biomejs/biome": 1.9.4
+  "@changesets/cli": ^2.29.2
+  "@types/lodash-es": ^4.17.12
+  "@types/node": ^22.15.3
+  "@types/react": ^19.1.2
+  "@types/react-dom": ^19
+  "@xterm/headless": ^5.5.0
+  "@xterm/xterm": ^5.5.0
+  css-tree: ^3.1.0
+  lodash-es: ^4.17.21
+  react: ^19.1.0
+  react-dom: ^19.0.0
+  react-reconciler: ^0.32.0
+  ts-dedent: ^2.2.0
+  tsx: ^4.19.4
+  turbo: ^2.5.0
+  typedoc: ^0.28.3
+  typedoc-plugin-markdown: ^4.6.3
+  typescript: ^5.8.3
+  use-effect-event: ^1.0.2
+  valibot: ^1.0.0
+  vitest: ^3.1.2
+  vocs: ^1.0.11

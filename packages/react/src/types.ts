@@ -1,0 +1,28 @@
+import type {
+  MouseClickEvent,
+  MouseDownEvent,
+  MouseEnterEvent,
+  MouseLeaveEvent,
+  MouseMoveEvent,
+  MouseUpEvent,
+  ScrollEvent,
+} from "@term-ui/dom";
+import type { PropsWithChildren } from "react";
+
+export type ElementEvents = {
+  onClick?: (event: MouseClickEvent) => void;
+  onMouseEnter?: (event: MouseEnterEvent) => void;
+  onMouseLeave?: (event: MouseLeaveEvent) => void;
+  onMouseMove?: (event: MouseMoveEvent) => void;
+  onMouseDown?: (event: MouseDownEvent) => void;
+  onMouseUp?: (event: MouseUpEvent) => void;
+  onScroll?: (event: ScrollEvent) => void;
+};
+export type TermViewProps = PropsWithChildren<
+  {
+    style?: React.CSSProperties;
+  } & ElementEvents
+>;
+export type TermTextProps = PropsWithChildren<{
+  style?: React.CSSProperties;
+}>;

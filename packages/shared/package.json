@@ -1,0 +1,23 @@
+{
+  "name": "@term-ui/shared",
+  "type": "module",
+  "version": "0.0.0",
+  "exports": {
+    "./*": {
+      "default": "./dist/*.js",
+      "types": "./dist/*.d.ts"
+    }
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch --preserveWatchOutput -p tsconfig.build.json",
+    "cleanup": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": ["dist", "README.md"]
+}

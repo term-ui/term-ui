@@ -1,0 +1,40 @@
+{
+  "name": "@term-ui/core",
+  "type": "module",
+  "version": "0.0.0",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./node": {
+      "import": "./dist/node.js",
+      "types": "./dist/node.d.ts"
+    },
+    "./core.wasm": "./dist/core.wasm",
+    "./core-debug.wasm": "./dist/core-debug.wasm"
+  },
+  "scripts": {
+    "build:wasm:debug": "zig build wasm",
+    "cleanup": "rm -rf dist zig-out .zig-cache",
+    "build:wasm": "zig build wasm --release=safe",
+    "dev:wasm": "watchexec -e zig -- zig build wasm",
+    "build:js": "tsc -p tsconfig.build.json && wasm-opt -Oz --strip-dwarf -o dist/core.wasm zig-out/bin/core.wasm && cp zig-out/bin/core-debug.wasm dist/core-debug.wasm ",
+    "build": "rm -rf dist && pnpm run build:wasm && pnpm run build:wasm:debug && pnpm run build:js",
+    "dev": "watchexec -e ts,zig,wasm -- pnpm run build:wasm && pnpm run build:js"
+  },
+  "devDependencies": {
+    "@term-ui/shared": "workspace:*"
+  },
+  "dependencies": {
+    "@types/lodash-es": "catalog:",
+    "@types/node": "catalog:",
+    "lodash-es": "catalog:",
+    "ts-dedent": "catalog:",
+    "valibot": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": ["dist", "README.md"]
+}

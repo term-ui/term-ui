@@ -1,0 +1,27 @@
+{
+  "name": "@term-ui/root",
+  "dependencies": {
+    "tsx": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@changesets/cli": "catalog:"
+  },
+  "workspaces": ["packages/*", "examples/*"],
+  "scripts": {
+    "build": "turbo run build --filter=./packages/* --filter=!@term-ui/docs",
+    "dev": "turbo run dev --filter=./packages/* --filter=!@term-ui/docs",
+    "dev:docs": "turbo run dev --filter=./packages/docs",
+    "lint": "biome check",
+    "lint:fix": "biome check --unsafe --write",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "publish": "pnpm build && changeset publish",
+    "cleanup": "turbo run cleanup"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.3.0"
+}

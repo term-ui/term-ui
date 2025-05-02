@@ -1,0 +1,30 @@
+{
+  "name": "@term-ui/react",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "version": "0.0.0",
+  "devDependencies": {
+    "@term-ui/core": "workspace:*",
+    "@term-ui/dom": "workspace:*",
+    "@term-ui/shared": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch --preserveWatchOutput -p tsconfig.build.json",
+    "cleanup": "rm -rf dist"
+  },
+  "dependencies": {
+    "@types/lodash-es": "catalog:",
+    "@types/node": "catalog:",
+    "lodash-es": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": ["dist", "README.md"]
+}
