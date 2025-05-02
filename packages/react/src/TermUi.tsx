@@ -9,8 +9,8 @@ import {
 } from "@term-ui/dom";
 import type { OpaqueRoot } from "react-reconciler";
 import { ConcurrentRoot } from "react-reconciler/constants";
-import { Viewport } from "./Viewport";
-import { reconciler } from "./reconciler/reconciler";
+import { Viewport } from "./Viewport.js";
+import { reconciler } from "./reconciler/reconciler.js";
 
 /**
  * Options for creating a TermUi instance

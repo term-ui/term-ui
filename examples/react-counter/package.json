@@ -1,5 +1,5 @@
 {
-  "name": "@term-ui/example-calculator",
+  "name": "@term-ui/example-react-counter",
   "private": true,
   "type": "module",
   "scripts": {

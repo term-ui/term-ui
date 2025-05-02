@@ -90,7 +90,7 @@ const SEGMENT_MAP: Record<
 
 const SegmentDisplay = ({
   char,
-  color = "rgba(255, 192, 203, 1)", // Default pink with full alpha
+  color,
 }: {
   char: keyof typeof SEGMENT_MAP;
   color?: string;
@@ -145,10 +145,25 @@ const SegmentDisplay = ({
     </term-view>
   );
 };
+const borderColor = "rgba(74, 0, 91, 0.5)";
+const borderColorDarker =
+  "rgba(74, 0, 91, 1)";
+const borderColorLighter =
+  "rgba(74, 0, 91, 0.1)";
+
+const displayBackgroundColor =
+  "rgba(255, 255, 255, 0.2)";
+
+const textColor = "rgba(74, 0, 91, 0.8)";
+
+const digitsColor = "rgba(251, 115, 100,1)";
+const digitsColorLighter =
+  "rgba(251, 115, 100, 0.8)";
+const lastColumnColor = "#fb7364";
 
 const SegmentDisplayPanel = ({
   number,
-  color = "rgba(255, 192, 203, 1)", // Default pink with full alpha
+  color,
 }: {
   number: string;
   color?: string;
@@ -181,11 +196,13 @@ const CalculatorButton = ({
   onClick,
   style,
   activeStyles = {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: borderColorDarker,
+    backgroundColor: borderColorLighter,
+    color: textColor,
   },
   hoverStyles = {
-    borderColor: "rgba(255, 255, 255, 1)",
-    color: "rgba(255, 255, 255, 1)",
+    borderColor: borderColorDarker,
+    color: textColor,
   },
 }: PropsWithChildren<{
   onClick: () => void;
@@ -206,6 +223,7 @@ const CalculatorButton = ({
       style={{
         height: 5,
         borderStyle: "rounded",
+        borderColor,
         borderWidth: 1,
         display: "flex",
         justifyContent: "center",
@@ -214,10 +232,9 @@ const CalculatorButton = ({
         flexGrow: 1,
         flexShrink: 0,
         flexBasis: "25%",
-        color: "rgba(255, 255, 255, 0.8)",
+        color: "rgba(74, 0, 91, 0.8)",
         cursor: "pointer",
-        borderColor:
-          "linear-gradient(45deg, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0.7))",
+
         ...(style ?? {}),
         ...(isHovered ? (hoverStyles ?? {}) : {}),
         ...(isActive ? (activeStyles ?? {}) : {}),
@@ -326,6 +343,9 @@ const Calculator = () => {
   };
 
   const onClick = (button: string) => {
+    if (!button) {
+      return;
+    }
     switch (button) {
       case "AC": {
         setDisplay("0");
@@ -444,8 +464,6 @@ const Calculator = () => {
       }
     }
   };
-  const lastColumnColor =
-    "rgba(142, 81, 255, 0.2)";
 
   return (
     <term-view
@@ -457,8 +475,9 @@ const Calculator = () => {
         margin: "auto",
         borderStyle: "rounded",
         flexDirection: "column",
+        borderColor,
         backgroundColor:
-          "rgba(255, 255, 255, 0.05)",
+          "rgba(255, 255, 255, 0.3)",
         padding: "1",
       }}
     >
@@ -467,7 +486,8 @@ const Calculator = () => {
           position: "absolute",
           top: 0,
           right: 2,
-          color: "rgba(255, 255, 255, 0.6)",
+          color: textColor,
+          fontWeight: "bold",
         }}
       >
         @term-ui/react
@@ -476,7 +496,8 @@ const Calculator = () => {
         style={{
           padding: "1",
           backgroundColor:
-            "rgba(255, 255, 255, 0.1)",
+            displayBackgroundColor,
+          borderColor,
           borderStyle: "rounded",
           display: "flex",
 
@@ -490,8 +511,8 @@ const Calculator = () => {
           number={display}
           color={
             waitingForOperand
-              ? "rgba(255, 192, 203, 0.8)"
-              : "rgba(255, 192, 203, 1)"
+              ? digitsColorLighter
+              : digitsColor
           }
         />
       </term-view>
@@ -590,24 +611,27 @@ const Calculator = () => {
       <term-view
         style={{
           display: "flex",
+          color: "rgba(74, 0, 91, 0.8)",
         }}
       >
-        {["", "0", ".", "="].map((text, i) => (
-          <CalculatorButton
-            key={text}
-            onClick={() => onClick(text)}
-            style={
-              i === 3
-                ? {
-                    backgroundColor:
-                      lastColumnColor,
-                  }
-                : {}
-            }
-          >
-            {text}
-          </CalculatorButton>
-        ))}
+        {["", "0", ".", "="].map((text, i) => {
+          return (
+            <CalculatorButton
+              key={text}
+              onClick={() => onClick(text)}
+              style={
+                i === 3
+                  ? {
+                      backgroundColor:
+                        lastColumnColor,
+                    }
+                  : {}
+              }
+            >
+              {text}
+            </CalculatorButton>
+          );
+        })}
       </term-view>
     </term-view>
   );
@@ -623,7 +647,7 @@ const App = () => {
         overflow: "scroll",
         padding: "1",
         backgroundColor:
-          "radial-gradient(circle at top left,rgba(10, 10, 10, 1), rgba(252, 70, 107, .05))",
+          "radial-gradient(circle at top left,#e66465, #9198e5)",
       }}
     >
       <Calculator />
@@ -632,8 +656,6 @@ const App = () => {
 };
 
 await TermUi.createRoot(<App />, {
-  readStream: process.stdin,
-  writeStream: process.stdout,
   size: {
     width: "100%",
     height: "100%",

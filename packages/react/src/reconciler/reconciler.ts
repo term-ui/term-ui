@@ -10,7 +10,7 @@ import {
   DefaultEventPriority,
   type EventPriority,
 } from "react-reconciler/constants";
-import type { TermUi } from "../TermUi";
+import type { TermUi } from "../TermUi.js";
 
 const noop =
   <T>(value?: T) =>

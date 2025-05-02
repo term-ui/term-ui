@@ -1,7 +1,7 @@
 import type {
   TermTextProps,
   TermViewProps,
-} from "./types";
+} from "./types.js";
 
 declare global {
   namespace React {
