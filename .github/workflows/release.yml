@@ -7,6 +7,10 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   release:
     name: Release
@@ -23,24 +27,49 @@ jobs:
           node-version: 20
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Cache Zig
+        uses: actions/cache@v3
+        id: cache-zig
+        with:
+          path: ~/.zig
+          key: ${{ runner.os }}-zig-0.15.0-dev.386+2e35fdd03
+
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
+        if: steps.cache-zig.outputs.cache-hit != 'true'
         with:
           version: 0.15.0-dev.386+2e35fdd03
         
+      - name: Cache wasm-opt
+        uses: actions/cache@v3
+        id: cache-wasm-opt
+        with:
+          path: ~/.local/bin/wasm-opt
+          key: ${{ runner.os }}-wasm-opt-123
+
       - name: Install wasm-opt version 123
+        if: steps.cache-wasm-opt.outputs.cache-hit != 'true'
         run: |
+          mkdir -p ~/.local/bin
           # Download binaryen version 123
           curl -L https://github.com/WebAssembly/binaryen/releases/download/version_123/binaryen-version_123-x86_64-linux.tar.gz -o binaryen.tar.gz
           
           # Extract the tar file
           tar -xzf binaryen.tar.gz
           
-          # Move wasm-opt to a directory in PATH
-          sudo mv binaryen-version_123/bin/wasm-opt /usr/local/bin/
+          # Move wasm-opt to the cached location
+          cp binaryen-version_123/bin/wasm-opt ~/.local/bin/wasm-opt
+          chmod +x ~/.local/bin/wasm-opt
           
-          # Verify installation
-          wasm-opt --version
+          # Clean up
+          rm -rf binaryen.tar.gz binaryen-version_123
+
+      - name: Add wasm-opt to PATH
+        run: |
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify wasm-opt
+        run: wasm-opt --version
 
       - name: Setup PNPM
         uses: pnpm/action-setup@v2
@@ -75,4 +104,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} 
