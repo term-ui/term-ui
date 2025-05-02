@@ -1,25 +1,15 @@
 # @term-ui/react
 
-React bindings for Term UI - build beautiful, interactive terminal applications with React.
+Term UI for React - build beautiful, interactive terminal applications with the tools you know. @term-ui/react makes hidden and overcomplicated terminal features as easy to use as building any other React app.
+<p align="center">
+  <img width="756" alt="Calculator demo" src="https://github.com/user-attachments/assets/4c374a9f-8b72-4a75-941c-213ddcfb7310" />
+</p>
 
 ## Features
 
 - **React for the Terminal**: Use React components to build terminal UIs
-- **Custom Elements**: `<term-view>` and `<term-text>` components for terminal UI
-- **Styling with React**: Use familiar inline styles with React syntax
-- **Event Handling**: React event handling for terminal interactions
-- **State Management**: Use React hooks and state management in the terminal
-- **Composable**: Create reusable components for terminal UIs
-
-## Demo
-
-<p align="center">
-  <a href="../docs/docs/assets/calculator-demo.mp4">
-    <img src="https://github.com/term-ui/term-ui/assets/calculator-screenshot.png" alt="Calculator Demo (Click to view video)" width="600">
-    <br>
-    <em>Click to view calculator demo video</em>
-  </a>
-</p>
+- **Advanced styling**: Use familiar styles with React syntax
+- **Support for mouse events**: Builtin support for click, hover, scroll and other mouse events
 
 ## Installation
 
