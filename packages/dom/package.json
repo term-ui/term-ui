@@ -1,6 +1,6 @@
 {
   "name": "@term-ui/dom",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -23,7 +23,10 @@
     "url": "https://github.com/yourusername/term-ui.git",
     "directory": "packages/dom"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public"
   },

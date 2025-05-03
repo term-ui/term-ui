@@ -3,7 +3,7 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "devDependencies": {
     "@term-ui/core": "workspace:*",
     "@term-ui/dom": "workspace:*",
@@ -27,5 +27,8 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist", "README.md"]
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }
