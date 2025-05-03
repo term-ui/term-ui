@@ -255,9 +255,10 @@ export fn Tree_setStyleProperty(tree: *Tree, node: u32, key: [*:0]u8, value: [*:
     logger.info("Tree_setStyleProperty({*}, {d}, \"{s}\", \"{s}\")", .{ tree, node, key, value });
     defer freeNullTerminatedBuffer(key);
     defer freeNullTerminatedBuffer(value);
-    tree.computed_style_cache.invalidateNode(node);
+    // tree.computed_style_cache.invalidateNode(node);
     parsers.parseStyleProperty(
-        &tree.getNode(node).styles,
+        tree,
+        node,
         key[0..std.mem.len(key)],
         value[0..std.mem.len(value)],
     );

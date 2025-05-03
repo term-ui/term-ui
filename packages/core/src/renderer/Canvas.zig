@@ -12,7 +12,11 @@ const Sampler = @import("gradient.zig").Sampler;
 const RadialGradientSampler = @import("gradient.zig").RadialGradientSampler;
 const debug = @import("../debug.zig");
 pub const LayoutRect = @import("../layout/rect.zig").Rect;
+
 cells: Array(Cell) = .{},
+previous_cells: Array(Cell) = .{},
+
+force_redraw: bool = true,
 clear_color: Color = Color.tw.black,
 fg_color: Color = Color.tw.white,
 allocator: std.mem.Allocator,
@@ -21,7 +25,7 @@ is_continuation: bool = false,
 mask: Rect,
 
 anti_aliasing_samples: u32 = 1, // Default to 1 (no anti-aliasing) for better performance
-render_buffer: ?std.ArrayList(u8) = null, // Buffer for rendering output
+render_buffer: std.ArrayListUnmanaged(u8) = .{}, // Buffer for rendering output
 
 const Self = @This();
 pub fn resize(self: *Self, size: Point(u32)) !void {
@@ -34,6 +38,7 @@ pub fn resize(self: *Self, size: Point(u32)) !void {
     }
     self.size = size;
     self.mask = Rect.init(0, 0, @floatFromInt(size.x), @floatFromInt(size.y));
+    self.force_redraw = true;
     try self.clear();
 }
 
@@ -143,6 +148,24 @@ pub const TextFormat = struct {
             .decoration_thickness = text_decoration.thickness,
         };
     }
+    pub fn equal(self: TextFormat, other: TextFormat) bool {
+        if (self.is_bold != other.is_bold or
+            self.is_italic != other.is_italic or
+            self.is_dim != other.is_dim or
+            self.decoration_line != other.decoration_line or
+            self.decoration_thickness != other.decoration_thickness)
+        {
+            return false;
+        }
+
+        if (self.decoration_color) |a| {
+            if (other.decoration_color) |b| {
+                return a.equal(b);
+            }
+            return false;
+        }
+        return true;
+    }
 };
 
 const Cell = struct {
@@ -152,10 +175,30 @@ const Cell = struct {
             formatting: TextFormat = .{},
         },
         border_char: styles.border.BoxChar,
+        pub fn equal(self: @This(), other: @This()) bool {
+            switch (self) {
+                .text => |text| {
+                    switch (other) {
+                        .text => |other_text| {
+                            return text.formatting.equal(other_text.formatting) and std.mem.eql(u8, text.buf.slice(), other_text.buf.slice());
+                        },
+                        else => return false,
+                    }
+                },
+                .border_char => |border_char| {
+                    switch (other) {
+                        .border_char => |other_border_char| {
+                            return border_char.encode() == other_border_char.encode();
+                        },
+                        else => return false,
+                    }
+                },
+            }
+        }
     } = .{ .text = .{} },
     width: u32 = 0,
-    fg: Color,
-    bg: Color,
+    fg: Color = Color.tw.white,
+    bg: Color = Color.tw.black,
     pub fn setText(self: *Cell, chars: []const u8, width: u32, formatting: TextFormat) void {
         self.data = .{ .text = .{ .formatting = formatting } };
         self.data.text.buf.appendSlice(chars) catch std.debug.panic("failed to append slice", .{});
@@ -187,6 +230,26 @@ const Cell = struct {
             },
         }
     }
+    pub fn equal(self: *Cell, other: *Cell) bool {
+        // if (self.width != other.width or !self.bg.equal(other.bg) or !self.fg.equal(other.fg) or !self.data.text.formatting.equal(other.data.text.formatting)) {
+        //     return false;
+        // }
+        // switch (self.data) {
+        //     .text => {
+        //         if (!std.mem.eql(u8, self.data.text.buf.slice(), other.data.text.buf.slice())) {
+        //             return false;
+        //         }
+
+        //         return true;
+        //     },
+        //     .border_char => {
+        //         return self.data.border_char.encode() == other.data.border_char.encode();
+        //     },
+        // }
+
+        return self.width == other.width and self.bg.equal(other.bg) and self.fg.equal(other.fg) and self.data.equal(other.data);
+        // return std.mem.eql(u8, std.mem.asBytes(self), std.mem.asBytes(other));
+    }
     pub fn clear(self: *Cell, clear_color: Color, fg_color: Color) void {
         self.clearText();
         self.fg = fg_color;
@@ -210,7 +273,35 @@ const Cell = struct {
     pub fn format(self: *Cell, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = fmt; // autofix
         _ = options; // autofix
-        try writer.print("Cell[chars={any}, width={d}, fg={any}, bg={any}, format={any}]", .{ self.chars, self.width, self.fg, self.bg, self.formatting });
+        try writer.writeAll("Cell[");
+        switch (self.data) {
+            .text => |text| {
+                try writer.print("text={any} ", .{text.buf.slice()});
+                if (text.formatting.is_bold) {
+                    try writer.print("bold ", .{});
+                }
+                if (text.formatting.is_italic) {
+                    try writer.print("italic ", .{});
+                }
+                if (text.formatting.is_dim) {
+                    try writer.print("dim ", .{});
+                }
+                try writer.print("decoration_line={s}, ", .{@tagName(text.formatting.decoration_line)});
+                if (text.formatting.decoration_color) |color| {
+                    try writer.print("decoration_color={any} ", .{color});
+                }
+                if (text.formatting.decoration_thickness > 0) {
+                    try writer.print("decoration_thickness={d} ", .{text.formatting.decoration_thickness});
+                }
+            },
+            .border_char => |border_char| {
+                try writer.print("border_char={d} ", .{border_char.encode()});
+            },
+        }
+        try writer.print("width={d} fg={any} bg={any}]", .{ self.width, self.fg, self.bg });
+        //     _ = fmt; // autofix
+        //     _ = options; // autofix
+        // try writer.print("Cell[chars={any}, width={d}, fg={any}, bg={any}, format={any}]", .{ self.data.text.buf, self.width, self.fg, self.bg, self.data.text.formatting });
     }
 };
 
@@ -222,7 +313,6 @@ pub fn init(allocator: std.mem.Allocator, size: Point(u32), clear_color: Color, 
         .fg_color = fg_color,
         .mask = Rect.init(0, 0, @floatFromInt(size.x), @floatFromInt(size.y)),
         .anti_aliasing_samples = 1, // Default to no anti-aliasing
-        .render_buffer = std.ArrayList(u8).init(allocator),
     };
 
     return self;
@@ -230,25 +320,32 @@ pub fn init(allocator: std.mem.Allocator, size: Point(u32), clear_color: Color, 
 
 pub fn deinit(self: *Self) void {
     self.cells.deinit(self.allocator);
-    if (self.render_buffer) |*buffer| {
-        buffer.deinit();
-    }
+    self.previous_cells.deinit(self.allocator);
+    self.render_buffer.deinit(self.allocator);
 }
+
 pub fn resetMask(self: *Self) void {
     self.mask = Rect.init(0, 0, @floatFromInt(self.size.x), @floatFromInt(self.size.y));
 }
 pub fn clear(self: *Self) !void {
+    // std.debug.print("clearing canvas\n", .{});
     const len = self.size.x * self.size.y;
     debug.assert(len > 0, "canvas area must be positive: {d}", .{len});
 
     try self.cells.ensureTotalCapacity(self.allocator, len);
-    self.cells.clearRetainingCapacity();
+    self.cells.items.len = len;
+    // self.cells.clearRetainingCapacity();
 
-    self.cells.appendNTimesAssumeCapacity(.{
+    const cell = Cell{
         .fg = self.fg_color,
         .bg = self.clear_color,
-    }, len);
+    };
+    for (0..len) |i| {
+        self.cells.items[i] = cell;
+    }
 
+    // try self.cells.appendNTimes(self.allocator, cell, len);
+    debug.assert(self.cells.items.len == len, "cell count doesn't match canvas size: cell count={d}, expected={d}", .{ self.cells.items.len, len });
     debug.assert(self.cells.items.len == len, "cell count doesn't match canvas size: cell count={d}, expected={d}", .{ self.cells.items.len, len });
 }
 pub fn setMask(self: *Self, mask: Rect) void {
@@ -564,54 +661,72 @@ fn writeFormattingSequence(writer: std.io.AnyWriter, current_format: TextFormat,
 }
 
 pub fn render(self: *Self, writer: std.io.AnyWriter, clear_screen: bool) !void {
-
-    // Initialize buffer if needed
-    if (self.render_buffer == null) {
-        self.render_buffer = std.ArrayList(u8).init(self.allocator);
+    if (self.force_redraw or self.previous_cells.items.len != self.cells.items.len) {
+        try self.renderInner(writer, clear_screen, true);
+        self.force_redraw = false;
+    } else {
+        try self.renderInner(writer, clear_screen, false);
     }
+}
+pub fn moveCursorBy(writer: std.io.AnyWriter, x: i32, y: i32) !void {
+    if (y > 0) {
+        try writer.print("\x1b[{d}B", .{y});
+    } else if (y < 0) {
+        try writer.print("\x1b[{d}A", .{-y});
+    }
+    if (x > 0) {
+        try writer.print("\x1b[{d}C", .{x});
+    } else if (x < 0) {
+        try writer.print("\x1b[{d}D", .{-x});
+    }
+}
 
+pub fn renderInner(self: *Self, writer: std.io.AnyWriter, clear_screen: bool, comptime full_paint: bool) !void {
     // Clear the buffer
-    self.render_buffer.?.clearRetainingCapacity();
-
-    // Estimated capacity to avoid frequent reallocations
-    const estimated_capacity = self.size.x * self.size.y;
-    try self.render_buffer.?.ensureTotalCapacity(estimated_capacity);
-
-    // Prepare a writer for the buffer
-    const buf_writer = self.render_buffer.?.writer().any();
-    // const DISABLE_SYNC_OUTPUT = "\x1b[?2026l";
-    // const ENABLE_SYNC_OUTPUT = "\x1b[?2026h";
-    // _ = ENABLE_SYNC_OUTPUT; // autofix
-    // try anywriter.writeAll(DISABLE_SYNC_OUTPUT);
+    self.render_buffer.clearRetainingCapacity();
+    const buf_writer = self.render_buffer.writer(self.allocator).any();
     if (clear_screen) {
         try buf_writer.writeAll("\x1b[H");
     }
 
+    var last_x: i32 = -1;
+    var last_y: i32 = 0;
     // Render to buffer
     var y: u32 = 0;
+
+    var bg = Color.tw.transparent;
+    var fg = Color.tw.transparent;
+    var current_format = TextFormat{};
+    var is_equal = true;
     while (y < self.size.y) : (y += 1) {
         var x: u32 = 0;
         var skip_cells: usize = 0;
-        // _ = skip_cells; // autofix
-
-        var bg = Color.tw.transparent;
-        var fg = Color.tw.transparent;
-        var current_format = TextFormat{};
-        // var format_active = false;
-        // _ = format_active; // autofix
-        // var prev_border_int: u64 = 0;
-        // _ = prev_border_int; // autofix
-        // var border_buf: [8]u8 = undefined;
-        // _ = border_buf; // autofix
-        // var border_len: usize = 0;
-        // _ = border_len; // autofix
-
         while (x < self.size.x) : (x += 1) {
             debug.assert(x < self.size.x, "x coordinate out of bounds: x={d}, width={d}", .{ x, self.size.x });
             debug.assert(y < self.size.y, "y coordinate out of bounds: y={d}, height={d}", .{ y, self.size.y });
 
-            var cell = self.fetchCell(u32, .{ .x = x, .y = y });
+            const cell_index: usize = y * self.size.x + x;
+            var cell = &self.cells.items[cell_index];
+            if (comptime !full_paint) {
+                var prev_cell = &self.previous_cells.items[cell_index];
+                if (prev_cell.equal(cell)) {
+                    continue;
+                }
+                const _y: i32 = @intCast(y);
+                const _x: i32 = @intCast(x);
+                const y_offset = _y - last_y;
+                const x_offset = _x - (last_x + 1);
+                // std.debug.print("last_pos: {d} {d}\n", .{ last_x, last_y });
+                // std.debug.print("pos:      {d} {d}\n", .{ x, y });
+                // std.debug.print("offset:   {d} {d}\n", .{ x_offset, y_offset });
+                try moveCursorBy(buf_writer, x_offset, y_offset);
+                // std.debug.print("moveCursorBy({d}, {d})\n", .{ x_offset, y_offset });
 
+                last_x = _x;
+                last_y = _y;
+            }
+
+            is_equal = false;
             // Apply background color if changed
             if (!cell.bg.equal(bg)) {
                 bg = cell.bg;
@@ -651,42 +766,50 @@ pub fn render(self: *Self, writer: std.io.AnyWriter, clear_screen: bool) !void {
                 },
             };
             skip_cells = drawn_width - 1;
-
-            // Handle formatting attributes if they've changed
-
-            // if (has_border) {
-            //     // Only re-encode the border character if it changed
-            //     if (cell_border_char_int != prev_border_int) {
-            //         prev_border_int = cell_border_char_int;
-            //         const border_style = cell.border.getChar();
-            //         border_len = std.unicode.utf8Encode(border_style, border_buf[0..]) catch unreachable;
-            //         debug.assert(border_len > 0, "failed to encode border character", .{});
-            //     }
-            //     try anywriter.writeAll(border_buf[0..border_len]);
-            // } else {
-            //     if (skip_cells > 0) {
-            //         skip_cells -= 1;
-            //         continue;
-            //     }
-
-            //     skip_cells = @max(1, cell.width) - 1;
-            //     if (cell.width == 0) {
-            //         try anywriter.writeAll(" ");
-            //     } else {
-            //         debug.assert(cell.chars.len > 0, "cell has non-zero width but no characters: width={d}", .{cell.width});
-            //         try anywriter.writeAll(cell.chars);
-            //     }
-            // }
         }
-        try buf_writer.writeAll("\x1b[0m");
-        if (y < self.size.y - 1) {
-            try buf_writer.writeAll("\n");
+
+        if (comptime full_paint) {
+            const _x: i32 = @intCast(self.size.x);
+
+            try moveCursorBy(buf_writer, -_x, 1);
         }
     }
-    // try anywriter.writeAll(DISABLE_SYNC_OUTPUT);
+    if (comptime !full_paint) {
+        if (is_equal) {
+            return;
+        }
+        const _y: i32 = @intCast(y);
+        const _x: i32 = 0;
+        const y_offset = _y - last_y;
+        const x_offset = -last_x - 1;
 
-    // Write the buffer to the output
-    try writer.writeAll(self.render_buffer.?.items);
+        try moveCursorBy(buf_writer, x_offset, y_offset);
+
+        last_x = _x;
+        last_y = _y;
+    }
+
+    try buf_writer.writeAll("\x1b[0m");
+
+    self.previous_cells.clearRetainingCapacity();
+    try self.previous_cells.appendSlice(self.allocator, self.cells.items);
+
+    // // Write the buffer to the output
+    // for (self.render_buffer.items) |c| {
+    //     switch (c) {
+    //         '\x1b' => {
+    //             std.debug.print("\\e", .{});
+    //         },
+    //         else => {
+    //             std.debug.print("{c}", .{c});
+    //         },
+    //     }
+    // }
+    // std.debug.print("\n\n", .{});
+    // // if (!is_equal) {
+    try writer.writeAll(self.render_buffer.items);
+    // }
+    // std.debug.print("written bytes: {d}\n", .{self.render_buffer.?.items.len});
 }
 pub fn drawRectBorder(self: *Self, _rect: Rect, border: LayoutRect(styles.border.BoxChar.Cell), border_color: LayoutRect(styles.background.Background)) !void {
     if (border.top.style == .none and border.bottom.style == .none and border.left.style == .none and border.right.style == .none) {
@@ -843,93 +966,33 @@ test "canvas" {
     try styles.border.BoxChar.load();
     var canvas = try init(
         std.testing.allocator,
-        .{ .x = 40, .y = 20 },
-        Color.tw.indigo_500,
+        .{ .x = 5, .y = 3 },
+        Color.tw.black,
         Color.tw.white,
     );
     try canvas.clear();
     defer canvas.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const color = try styles.background.parse(arena.allocator(), "linear-gradient(to right, red, blue)", 0);
+    const writer = std.io.getStdErr().writer().any();
+    // try writer.writeAll("\x1b[?7l");
+    // try writer.print("--------------------------------\n", .{});
+    try canvas.drawRectBg(Rect.init(0, 0, 5, 3), .{ .solid = Color.tw.indigo_500 });
+    // try canvas.drawString(.{ .x = 0, .y = 0 }, "A", null);
+    try canvas.drawString(.{ .x = 2, .y = 1 }, "B", null);
+    try canvas.drawString(.{ .x = 3, .y = 2 }, "C", null);
+    try canvas.drawString(.{ .x = 4, .y = 3 }, "D", null);
+    try canvas.render(writer, true);
 
-    const border_color: LayoutRect(styles.background.Background) = .{
-        .top = color.value,
-        .right = color.value,
-        .bottom = color.value,
-        .left = color.value,
-        // .top = .{ .solid = Color.tw.red_500 },
-        // .right = .{ .solid = Color.tw.red_500 },
-        // .bottom = .{ .solid = Color.tw.red_500 },
-        // .left = .{ .solid = Color.tw.red_500 },
-    };
-
-    try canvas.drawStringFormatted(.{ .x = 38, .y = 20 }, "Hello", null, .{ .is_bold = true });
-    try canvas.drawRectBorder(Rect.init(10, -2, 3, 3), .{
-        .top = .{ .style = .rounded },
-        .bottom = .{ .style = .rounded },
-        .left = .{ .style = .rounded },
-        .right = .{ .style = .rounded },
-    }, border_color);
-    try canvas.drawRectBorder(Rect.init(10, 20, 10, 10), .{
-        .top = .{ .style = .rounded },
-        .bottom = .{ .style = .rounded },
-        .left = .{ .style = .rounded },
-        .right = .{ .style = .rounded },
-    }, border_color);
-    try canvas.drawRectBorder(Rect.init(1, 1, 5, 1), .{
-        .top = .{ .style = .rounded },
-        .bottom = .{ .style = .rounded },
-        .left = .{ .style = .rounded },
-        .right = .{ .style = .rounded },
-    }, border_color);
-    try canvas.drawRectBorder(Rect.init(7, 1, 1, 2), .{
-        .top = .{ .style = .rounded },
-        .bottom = .{ .style = .rounded },
-        .left = .{ .style = .rounded },
-        .right = .{ .style = .rounded },
-    }, border_color);
-
-    try canvas.drawRectBorder(Rect.init(7, 5, 1, 1), .{
-        .top = .{ .style = .rounded },
-        .bottom = .{ .style = .rounded },
-        .left = .{ .style = .rounded },
-        .right = .{ .style = .rounded },
-    }, border_color);
-    try canvas.drawRectBorder(Rect.init(8, 5, 2, 15), .{
-        .top = .{ .style = .rounded },
-        .bottom = .{ .style = .rounded },
-        .left = .{ .style = .rounded },
-        .right = .{ .style = .rounded },
-    }, border_color);
-    // try canvas.drawRectBorder(Rect.init(7, 2, 10, 3), .{
-    //     .top = .{ .style = .double },
-    //     .bottom = .{ .style = .double },
-    //     .left = .{ .style = .double },
-    //     .right = .{ .style = .double },
-    // }, border_color);
-    // try canvas.drawRectBorder(Rect.init(8, 5, 10, 3), .{
-    //     .top = .{ .style = .double },
-    //     .bottom = .{ .style = .double },
-    //     .left = .{ .style = .double },
-    //     .right = .{ .style = .double },
-    // }, border_color);
-    try canvas.drawStringFormatted(.{ .x = 36, .y = 0 }, "Hello", null, .{ .is_bold = true });
-    try canvas.drawStringFormatted(.{ .x = 36, .y = 17 }, "Hello", null, .{ .is_bold = true });
-    try canvas.drawStringFormatted(.{ .x = 0, .y = 18 }, "Hello", null, .{ .is_bold = true });
-    try canvas.drawStringFormatted(.{ .x = -1, .y = 19 }, "Hello", null, .{ .is_bold = true });
-    try canvas.drawStringFormatted(
-        .{ .x = 10, .y = 10 },
-        "Hello",
-        null,
-        .{
-            .is_bold = true,
-            .is_italic = true,
-            .decoration_line = .wavy,
-            .decoration_color = Color.tw.red_400,
-        },
-    );
-    try canvas.render(std.io.getStdErr().writer().any(), false);
+    try canvas.clear();
+    try canvas.drawRectBg(Rect.init(0, 0, 5, 3), .{ .solid = Color.tw.indigo_500 });
+    try writer.print("--------------------------------\n", .{});
+    // try canvas.drawString(.{ .x = 0, .y = 0 }, "a", null);
+    try canvas.drawString(.{ .x = 2, .y = 1 }, "b", null);
+    try canvas.drawString(.{ .x = 3, .y = 2 }, "c", null);
+    try canvas.drawString(.{ .x = 4, .y = 3 }, "d", null);
+    // try canvas.drawString(.{ .x = 2, .y = 2 }, "AbcDef", null);
+    try canvas.render(writer, false);
 }
 
 pub fn renderToHtml(self: *Self, writer: std.io.AnyWriter) !void {

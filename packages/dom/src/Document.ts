@@ -367,10 +367,10 @@ export class Document {
         sequences.DISABLE_ALTERNATE_SCREEN,
       );
     }
-    this.pushSequence(
-      sequences.DISABLE_SCREEN_WRAP_MODE,
-      sequences.ENABLE_SCREEN_WRAP_MODE,
-    );
+    // this.pushSequence(
+    //   sequences.DISABLE_SCREEN_WRAP_MODE,
+    //   sequences.ENABLE_SCREEN_WRAP_MODE,
+    // );
     this.pushSequence(
       sequences.HIDE_CURSOR,
       sequences.SHOW_CURSOR,
