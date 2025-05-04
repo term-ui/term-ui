@@ -23,6 +23,7 @@ pub const font_style = @import("font-style.zig");
 pub const font_weight = @import("font-weight.zig");
 pub const border = @import("border.zig");
 pub const cursor = @import("cursor.zig");
+pub const pointer_events = @import("pointer-events.zig");
 
 // CSSOM Implementation modules
 pub const style_manager = @import("StyleManager.zig");
