@@ -124,20 +124,15 @@ pub fn renderNode(self: *Self, tree: *Tree, node_id: NodeId, position: Point(f32
             .pos = absolute_position,
             .size = layout.size,
         }, style.border_style, style.border_color);
-        self.drawNodeArea(node_id, .{
-            .pos = absolute_position,
-            .size = layout.size,
-        });
+        if (style.pointer_events == .auto) {
+            self.drawNodeArea(node_id, .{
+                .pos = absolute_position,
+                .size = layout.size,
+            });
+        }
         const children = tree.getChildren(node_id);
-        // var inner_location = absolute_position;
-        // _ = inner_location; // autofix
-
-        // const inner_location = new_position.sub(node.scroll_offset);
         const is_scrollable = style.overflow.y == .scroll or style.overflow.x == .scroll;
         const scroll_offset: Point(f32) = if (is_scrollable) node.scroll_offset else .{ .x = 0, .y = 0 };
-        // if (is_scrollable) {
-        //     inner_location = inner_location.sub(node.scroll_offset);
-        // }
         for (children.items) |child| {
             const child_layout = tree.getLayout(child);
             const child_viewport_rect: Canvas.Rect = .{

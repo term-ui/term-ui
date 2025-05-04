@@ -120,7 +120,7 @@ border_color: Rect(styles.background.Background) = .{
     },
 },
 cursor: styles.cursor.Cursor = .default,
-
+pointer_events: styles.pointer_events.PointerEvents = .auto,
 /// Copy all style properties from another style object
 pub fn copyFrom(self: *Styles, source: *const Styles) void {
     inline for (std.meta.fields(Styles)) |field| {

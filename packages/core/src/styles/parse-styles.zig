@@ -346,6 +346,12 @@ pub fn parseStyleProperty(tree: *Tree, node_id: Node.NodeId, _key: []const u8, _
             return;
         };
         tree.getNode(node_id).styles.cursor = parsed.value;
+    } else if (std.mem.eql(u8, key, "pointer-events")) {
+        const parsed = parsers.pointer_events.parse(value, 0) catch {
+            logger.warn("Invalid pointer-events value: '{s}'\n", .{value});
+            return;
+        };
+        tree.getNode(node_id).styles.pointer_events = parsed.value;
     } else {
         logger.warn("Unknown style property: '{s}'\n", .{key});
     }
@@ -374,6 +380,7 @@ pub fn parseStyleString(tree: *Tree, node_id: Node.NodeId, styles: []const u8) !
         };
         // value = trim(value);
         parseStyleProperty(tree, node_id, key, value);
+
         // const a = fba.allocator();
 
     }

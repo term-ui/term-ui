@@ -134,183 +134,180 @@ const isPlainObject = (
 
 let currentUpdatePriority: EventPriority =
   DefaultEventPriority;
-export const reconciler = createReconciler(
-  // new Reconciler(),
-  {
-    supportsMutation: true,
-    supportsPersistence: false,
-    supportsMicrotasks: true,
+export const reconciler = createReconciler({
+  supportsMutation: true,
+  supportsPersistence: false,
+  supportsMicrotasks: true,
 
-    isPrimaryRenderer: true,
+  isPrimaryRenderer: true,
 
-    noTimeout: -1,
-    scheduleTimeout: setTimeout,
-    cancelTimeout: clearTimeout,
+  noTimeout: -1,
+  scheduleTimeout: setTimeout,
+  cancelTimeout: clearTimeout,
 
-    createInstance: (
-      type: ElementType,
-      props: Props,
-      termUi: TermUi,
-      hostContext: HostContext,
-      internalHandle: unknown,
-    ) => {
-      const styles = normalizeStyle(
-        type,
-        props?.style,
+  createInstance: (
+    type: ElementType,
+    props: Props,
+    termUi: TermUi,
+    hostContext: HostContext,
+    internalHandle: unknown,
+  ) => {
+    const styles = normalizeStyle(
+      type,
+      props?.style,
+    );
+
+    const style = stringifyStyles(styles);
+    const node =
+      termUi.document.createElement("view");
+    node.setStyle(style);
+
+    // Attach event handlers on instance creation
+    attachEventHandlers(node, props);
+
+    return node;
+  },
+
+  createTextInstance: (
+    text: string,
+    termUi: TermUi,
+    hostContext: HostContext,
+  ) => {
+    // debug.log("createTextInstance", text);
+    const node =
+      termUi.document.createTextNode(text);
+    return node;
+  },
+  scheduleMicrotask: queueMicrotask,
+  getCurrentUpdatePriority: () =>
+    currentUpdatePriority,
+
+  resolveUpdatePriority: () =>
+    currentUpdatePriority,
+  setCurrentUpdatePriority: (priority) => {
+    currentUpdatePriority = priority;
+  },
+  getPublicInstance: (instance) => instance,
+
+  shouldSetTextContent: () => false,
+
+  getRootHostContext: () => NO_CONTEXT,
+  getChildHostContext: (parentContext) =>
+    parentContext,
+  finalizeInitialChildren: () => false,
+  prepareForCommit: () => null,
+  resetAfterCommit: (tui) => {
+    tui.render();
+  },
+  detachDeletedInstance: (instance) => {
+    if (instance.isDisposed()) {
+      return true;
+    }
+    instance.disposeRecursively();
+  },
+
+  appendInitialChild: (parent, child) => {
+    if (parent instanceof TextElement) {
+      throw new Error(
+        "appendInitialChild: parent is not a NodeWithProps",
       );
+    }
+    parent.appendChild(child);
+  },
 
-      const style = stringifyStyles(styles);
-      const node =
-        termUi.document.createElement("view");
-      node.setStyle(style);
+  appendChildToContainer: (tui, child) => {
+    tui.document.root.appendChild(child);
+  },
+  appendChild: (parent, child) => {
+    parent.appendChild(child);
+  },
+  insertBefore: (parent, child, before) => {
+    parent.insertBefore(child, before);
+  },
+  removeChild: (parentInstance, child) => {
+    if (parentInstance instanceof TextElement) {
+      throw new Error(
+        "removeChild: parentInstance is not a NodeWithProps",
+      );
+    }
 
-      // Attach event handlers on instance creation
-      attachEventHandlers(node, props);
+    parentInstance.removeChild(child);
+  },
 
-      return node;
-    },
+  removeChildFromContainer: (tui, child) => {
+    tui.document.root.removeChild(child);
+  },
 
-    createTextInstance: (
-      text: string,
-      termUi: TermUi,
-      hostContext: HostContext,
-    ) => {
-      // debug.log("createTextInstance", text);
-      const node =
-        termUi.document.createTextNode(text);
-      return node;
-    },
-    scheduleMicrotask: queueMicrotask,
-    getCurrentUpdatePriority: () =>
-      currentUpdatePriority,
+  clearContainer: (tui) => {
+    tui.document.root.removeChildren();
+  },
+  resetTextContent(instance) {
+    instance.setText("");
+  },
 
-    resolveUpdatePriority: () =>
-      currentUpdatePriority,
-    setCurrentUpdatePriority: (priority) => {
-      currentUpdatePriority = priority;
-    },
-    getPublicInstance: (instance) => instance,
-
-    shouldSetTextContent: () => false,
-
-    getRootHostContext: () => NO_CONTEXT,
-    getChildHostContext: (parentContext) =>
-      parentContext,
-    finalizeInitialChildren: () => false,
-    prepareForCommit: () => null,
-    resetAfterCommit: (tui) => {
-      tui.render();
-    },
-    detachDeletedInstance: (instance) => {
-      if (instance.isDisposed()) {
-        return true;
-      }
-      instance.disposeRecursively();
-    },
-
-    appendInitialChild: (parent, child) => {
-      if (parent instanceof TextElement) {
-        throw new Error(
-          "appendInitialChild: parent is not a NodeWithProps",
-        );
-      }
-      parent.appendChild(child);
-    },
-
-    appendChildToContainer: (tui, child) => {
-      tui.document.root.appendChild(child);
-    },
-    appendChild: (parent, child) => {
-      parent.appendChild(child);
-    },
-    insertBefore: (parent, child, before) => {
-      parent.insertBefore(child, before);
-    },
-    removeChild: (parentInstance, child) => {
-      if (parentInstance instanceof TextElement) {
-        throw new Error(
-          "removeChild: parentInstance is not a NodeWithProps",
-        );
-      }
-
-      parentInstance.removeChild(child);
-    },
-
-    removeChildFromContainer: (tui, child) => {
-      tui.document.root.removeChild(child);
-    },
-
-    clearContainer: (tui) => {
-      tui.document.root.removeChildren();
-    },
-    resetTextContent(instance) {
-      instance.setText("");
-    },
-
-    commitTextUpdate: (
-      instance,
-      oldText,
-      newText,
-    ) => {
-      // debug.log(instance.id, newText, oldText);
-      if (instance instanceof TextElement) {
-        if (newText === oldText) {
-          return;
-        }
-        // debug.log("setText", newText);
-        instance.setText(newText);
+  commitTextUpdate: (
+    instance,
+    oldText,
+    newText,
+  ) => {
+    // debug.log(instance.id, newText, oldText);
+    if (instance instanceof TextElement) {
+      if (newText === oldText) {
         return;
       }
-      throw new Error(
-        "commitTextUpdate: instance is not a TextElement",
-      );
-    },
-
-    commitUpdate: (
-      instance,
-      type,
-      oldProps,
-      newProps,
-    ) => {
-      // TODO: better diffing
-      // if (instance instanceof TextNode) {
-      //   return;
-      // }
-
-      const prevStyle = isPlainObject(
-        oldProps?.style,
-      )
-        ? stringifyStyles(
-            normalizeStyle(type, oldProps?.style),
-          )
-        : "";
-      const newStyle = isPlainObject(
-        newProps?.style,
-      )
-        ? stringifyStyles(
-            normalizeStyle(type, newProps?.style),
-          )
-        : "";
-      if (newStyle !== prevStyle) {
-        instance.setStyle(newStyle);
-      }
-
-      // Attach/update event handlers
-      attachEventHandlers(
-        instance,
-        newProps,
-        oldProps,
-      );
-    },
-
-    hideInstance: noop(false),
-    unhideInstance: noop(false),
-
-    maySuspendCommit: () => false,
-
-    preloadInstance: noop(null),
-    startSuspendingCommit: noop(),
-    suspendInstance: noop(null),
-    waitForCommitToBeReady: () => null,
+      // debug.log("setText", newText);
+      instance.setText(newText);
+      return;
+    }
+    throw new Error(
+      "commitTextUpdate: instance is not a TextElement",
+    );
   },
-);
+
+  commitUpdate: (
+    instance,
+    type,
+    oldProps,
+    newProps,
+  ) => {
+    // TODO: better diffing
+    // if (instance instanceof TextNode) {
+    //   return;
+    // }
+
+    const prevStyle = isPlainObject(
+      oldProps?.style,
+    )
+      ? stringifyStyles(
+          normalizeStyle(type, oldProps?.style),
+        )
+      : "";
+    const newStyle = isPlainObject(
+      newProps?.style,
+    )
+      ? stringifyStyles(
+          normalizeStyle(type, newProps?.style),
+        )
+      : "";
+    if (newStyle !== prevStyle) {
+      instance.setStyle(newStyle);
+    }
+
+    // Attach/update event handlers
+    attachEventHandlers(
+      instance,
+      newProps,
+      oldProps,
+    );
+  },
+
+  hideInstance: noop(false),
+  unhideInstance: noop(false),
+
+  maySuspendCommit: () => false,
+
+  preloadInstance: noop(null),
+  startSuspendingCommit: noop(),
+  suspendInstance: noop(null),
+  waitForCommitToBeReady: () => null,
+});

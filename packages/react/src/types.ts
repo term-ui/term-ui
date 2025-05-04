@@ -20,9 +20,11 @@ export type ElementEvents = {
 };
 export type TermViewProps = PropsWithChildren<
   {
+    key?: string;
     style?: React.CSSProperties;
   } & ElementEvents
 >;
 export type TermTextProps = PropsWithChildren<{
+  key?: string;
   style?: React.CSSProperties;
 }>;

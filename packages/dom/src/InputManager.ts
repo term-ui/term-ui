@@ -606,7 +606,9 @@ export class InputManager {
   }
   subscribe(cb: (event: InputEvent) => void) {
     this.listeners.add(cb);
-    return () => this.listeners.delete(cb);
+    return () => {
+      this.listeners.delete(cb);
+    };
   }
   clearConsumed() {
     const consumed = this.consumed;
