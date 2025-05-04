@@ -35,7 +35,7 @@ button.setStyle(`
 button.setText("Click me");
 document.root.appendChild(button);
 
-let timeout: NodeJS.Timeout;
+let timeout: number;
 button.addEventListener("click", () => {
   clearTimeout(timeout);
   button.setText("Thank you! 🎉");

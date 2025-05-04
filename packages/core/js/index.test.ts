@@ -254,6 +254,7 @@ describe("renderer", () => {
       "border: rounded; height: 4px;",
     );
     const renderer = module.Renderer_init();
+
     expect(renderer).toBeDefined();
     // for (let i = 0; i < 100; i++) {
     module.Tree_computeLayout(
@@ -261,11 +262,39 @@ describe("renderer", () => {
       "100",
       "max-content",
     );
+
     module.Renderer_renderToStdout(
       renderer,
       tree,
       false,
     );
+    module.Tree_setStyleProperty(
+      tree,
+      child,
+      "border-color",
+      "white",
+    );
+    module.Renderer_renderToStdout(
+      renderer,
+      tree,
+      false,
+    );
+    const cursorStyle =
+      module.Tree_getNodeCursorStyle(tree, child);
+    console.log(cursorStyle);
+
+    module.Tree_setStyleProperty(
+      tree,
+      child,
+      "cursor",
+      "pointer",
+    );
+    const cursorStyle2 =
+      module.Tree_getNodeCursorStyle(tree, child);
+    console.log(cursorStyle2);
+    // expect(cursorStyle).toBe(
+    //   module.CursorStyle.pointer,
+    // );
     // }
 
     // module.Renderer_render(renderer, canvas, tree);
