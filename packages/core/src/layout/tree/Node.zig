@@ -29,6 +29,9 @@ scroll_offset: Point(f32) = .{
 },
 computed_text: ?ComputedText = null,
 text_root_id: ?NodeId = null,
+content_editable: ContentEditable = .false,
+tabindex: i32 = -1,
+
 pub const NodeId = usize;
 pub fn deinit(self: *Node, allocator: std.mem.Allocator) void {
     self.children.deinit(allocator);
@@ -40,3 +43,19 @@ pub fn deinit(self: *Node, allocator: std.mem.Allocator) void {
         computed_text.deinit();
     }
 }
+pub fn length(self: *Node) usize {
+    switch (self.kind) {
+        .text => {
+            return self.text.items.len;
+        },
+        .node => {
+            return self.children.items.len;
+        },
+    }
+}
+
+pub const ContentEditable = enum {
+    true,
+    false,
+    plaintext_only,
+};

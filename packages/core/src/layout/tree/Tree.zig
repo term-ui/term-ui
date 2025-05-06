@@ -17,6 +17,7 @@ const ComputedStyleCache = s.computed_style.ComputedStyleCache;
 const StyleManager = s.style_manager.StyleManager;
 const InputManager = @import("../../cmd/input/manager.zig").AnyInputManager;
 const Event = @import("../../cmd/input/manager.zig").Event;
+const Selection = @import("Selection.zig");
 
 node_map: std.AutoHashMapUnmanaged(Node.NodeId, Node) = .{},
 allocator: std.mem.Allocator,
@@ -35,6 +36,9 @@ pub fn init(allocator: std.mem.Allocator) !Self {
         .allocator = allocator,
         .style_manager = try StyleManager.init(allocator),
         .computed_style_cache = try ComputedStyleCache.init(allocator),
+        // .selection = .{
+        //     .allocator = allocator,
+        // },
     };
 }
 
@@ -130,6 +134,10 @@ pub fn setText(self: *Self, id: Node.NodeId, text: []const u8) !void {
 
 pub fn setParent(self: *Self, id: Node.NodeId, parent: ?Node.NodeId) void {
     var node = self.getNode(id);
+    if (node.parent == parent) {
+        return;
+    }
+
     if (node.parent) |current_parent_id| {
         self.removeChild(current_parent_id, id);
     }
@@ -222,14 +230,9 @@ pub fn createNode(self: *Self) !Node.NodeId {
     const id = self.node_id_counter;
     self.node_id_counter += 1;
 
-    // try self.nodes.append(self.allocator, .{
-    //     .styles = Style.init(self.allocator),
-    //     // .children = try std.ArrayList(Node.NodeId).initCapacity(self.allocator, children.len),
-    // });
     try self.node_map.put(self.allocator, id, .{
         .id = id,
         .styles = .{},
-        // .children = try std.ArrayList(Node.NodeId).initCapacity(self.allocator, children.len),
     });
 
     return id;
@@ -383,48 +386,6 @@ pub fn print(self: *Self, writer: std.io.AnyWriter) !void {
     try self.printNode(writer, 0, 0);
 }
 
-// inline fn parseStyle(comptime style_string: []const u8) Style {
-//     comptime {
-//         var style: Style = .{};
-//         var lines = std.mem.splitSequence(u8, style_string, "\n");
-//         while (lines.next()) |line| {
-//             // const parts = std.mem.splitSequence(u8, line, ": ");
-//             const colon_index = std.mem.indexOfScalar(u8, line, ':') orelse @compileError("Invalid style string");
-//             const key = line[0..colon_index];
-//             const value = line[colon_index + 1 ..];
-//             const trimmed_key = std.mem.trim(u8, key, " ");
-//             const trimmed_value = std.mem.trim(u8, value, " ");
-//             if (std.mem.eql(u8, trimmed_key, "display")) {
-//                 if (std.mem.eql(u8, trimmed_value, "block")) {
-//                     style.display = .{ .inside = .flow, .outside = .block };
-//                 } else if (std.mem.eql(u8, trimmed_value, "flex")) {
-//                     style.display = .{ .inside = .flex, .outside = .block };
-//                 }
-//             } else if (std.mem.eql(u8, trimmed_key, "width")) {
-//                 if (std.mem.endsWith(u8, trimmed_value, "%")) {
-//                     style.size.x = .{ .percentage = (std.fmt.parseFloat(f32, trimmed_value[0 .. trimmed_value.len - 1]) catch unreachable) / 100 };
-//                 } else if (std.mem.eql(u8, trimmed_value, "auto")) {
-//                     style.size.x = .{ .auto = {} };
-//                 } else {
-//                     style.size.x = .{ .length = std.fmt.parseFloat(f32, trimmed_value) catch unreachable };
-//                 }
-//             } else if (std.mem.eql(u8, trimmed_key, "height")) {
-//                 if (std.mem.endsWith(u8, trimmed_value, "%")) {
-//                     style.size.y = .{ .percentage = (std.fmt.parseFloat(f32, trimmed_value[0 .. trimmed_value.len - 1]) catch unreachable) / 100 };
-//                 } else if (std.mem.eql(u8, trimmed_value, "auto")) {
-//                     style.size.y = .{ .auto = {} };
-//                 } else {
-//                     style.size.y = .{ .length = std.fmt.parseFloat(f32, trimmed_value) catch unreachable };
-//                 }
-//             }
-//             // const key = parts[0];
-//             // const value = parts[1];
-//             // style.insert(key, value);
-//         }
-//         return style;
-//     }
-// }
-
 pub inline fn parseTree(allocator: std.mem.Allocator, tree_string: []const u8) !Self {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
@@ -461,114 +422,17 @@ fn fromXmlElement(tree: *Self, node: *xml.Element) !Node.NodeId {
             tree.getNode(node_id).scroll_offset.x = std.fmt.parseFloat(f32, attr.value) catch unreachable;
             continue;
         }
-        // const a = style.arena.allocator();
-
-        // if (std.mem.eql(u8, attr.name, "display")) {
-        //     style.display = (try s.display.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "position")) {
-        //     style.position = (try s.position.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "width")) {
-        //     style.size.x = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "height")) {
-        //     style.size.y = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "min-width")) {
-        //     style.min_size.x = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "min-height")) {
-        //     style.min_size.y = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "max-width")) {
-        //     style.max_size.x = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "max-height")) {
-        //     style.max_size.y = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "top")) {
-        //     style.inset.top = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "right")) {
-        //     style.inset.right = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "bottom")) {
-        //     style.inset.bottom = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "left")) {
-        //     style.inset.left = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "overflow-x")) {
-        //     style.overflow.x = (try s.overflow.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "overflow-y")) {
-        //     style.overflow.y = (try s.overflow.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "overflow")) {
-        //     style.overflow = (try s.utils.parseVecShorthand(a, s.overflow.Overflow, attr.value, 0, s.overflow.parse)).value;
-        // } else if (std.mem.eql(u8, attr.name, "aspect-ratio")) {
-        //     // style.aspect_ratio = (try s.number.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "margin-top")) {
-        //     style.margin.top = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "margin-right")) {
-        //     style.margin.right = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "margin-bottom")) {
-        //     style.margin.bottom = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "margin-left")) {
-        //     style.margin.left = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "margin")) {
-        //     style.margin = (try s.utils.parseRectShorthand(a, s.length_percentage_auto.LengthPercentageAuto, attr.value, 0, s.length_percentage_auto.parse)).value;
-        // } else if (std.mem.eql(u8, attr.name, "padding-top")) {
-        //     style.padding.top = (try s.length_percentage.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "padding-right")) {
-        //     style.padding.right = (try s.length_percentage.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "padding-bottom")) {
-        //     style.padding.bottom = (try s.length_percentage.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "padding-left")) {
-        //     style.padding.left = (try s.length_percentage.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "padding")) {
-        //     style.padding = (try s.utils.parseRectShorthand(a, s.length_percentage.LengthPercentage, attr.value, 0, s.length_percentage.parse)).value;
-        // } else if (std.mem.eql(u8, attr.name, "flex-direction")) {
-        //     style.flex_direction = (try s.flex_direction.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "flex-wrap")) {
-        //     style.flex_wrap = (try s.flex_wrap.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "flex-basis")) {
-        //     style.flex_basis = (try s.length_percentage_auto.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "flex-grow")) {
-        //     style.flex_grow = (try s.number.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "flex-shrink")) {
-        //     style.flex_shrink = (try s.number.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "align-items")) {
-        //     style.align_items = (try s.align_items.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "align-self")) {
-        //     style.align_self = (try s.align_items.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "justify-items")) {
-        //     style.justify_items = (try s.align_items.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "justify-self")) {
-        //     style.justify_self = (try s.align_items.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "align-content")) {
-        //     style.align_content = (try s.align_content.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "justify-content")) {
-        //     style.justify_content = (try s.align_content.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "color")) {
-        //     style.foreground_color = (try s.color.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "background-color")) {
-        //     style.background_color = (try s.background.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "text-align")) {
-        //     style.text_align = (try s.text_align.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "text-wrap")) {
-        //     style.text_wrap = (try s.text_wrap.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "font-weight")) {
-        //     style.font_weight = (try s.font_weight.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "font-style")) {
-        //     style.font_style = (try s.font_style.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "text-decoration")) {
-        //     style.text_decoration = (try s.text_decoration.parse(a, attr.value, 0)).value;
-        // } else if (std.mem.eql(u8, attr.name, "gap")) {
-        //     style.gap = (try s.utils.parseVecShorthand(a, s.length_percentage.LengthPercentage, attr.value, 0, s.length_percentage.parse)).value;
-        // }
     }
-    // tree.setStyle(node_id, style);
     for (node.children) |child| {
         switch (child) {
             .element => |el| {
                 const child_id = try fromXmlElement(tree, el);
-                // try tree.getNode(node_id).appendChild(child_id);
                 try tree.appendChild(node_id, child_id);
             },
             .char_data => |text| {
                 if (!is_text_node) continue;
                 const child_id = try tree.createTextNode(text);
                 try tree.appendChild(node_id, child_id);
-                // try tree.getNode(node_id).appendChild(child_id);
-
             },
             else => {},
         }
@@ -635,4 +499,322 @@ test "createtree" {
     const layout = tree.getLayout(0);
     std.debug.print("\n\nlayout:\n{any}\n", .{(layout)});
     try tree.print(writer);
+}
+
+pub fn getNodeChildren(self: *Self, node_id: Node.NodeId) []const Node.NodeId {
+    switch (self.getNode(node_id).kind) {
+        .text => return &[_]Node.NodeId{},
+        .node => return self.getNode(node_id).children.items,
+    }
+}
+
+/// https://dom.spec.whatwg.org/#concept-tree-root
+/// The root of an object is itself, if its parent is null, or else it is the root of its parent. The root of a tree is any object participating in that tree whose parent is null.
+pub fn getNodeRoot(self: *Self, node_id: Node.NodeId) Node.NodeId {
+    var current: Node.NodeId = node_id;
+    while (self.getNode(current).parent) |parent| {
+        current = parent;
+    }
+    return current;
+}
+
+/// https://dom.spec.whatwg.org/#trees
+/// An object A is called a descendant of an object B, if either A is a child of B or A is a child of an object C that is a descendant of B.
+pub fn isNodeDescendant(self: *Self, node_id: Node.NodeId, maybe_ancestor_id: Node.NodeId) bool {
+    if (maybe_ancestor_id == node_id) return false;
+    var current: Node.NodeId = node_id;
+    while (self.getNode(current).parent) |parent| {
+        if (parent == maybe_ancestor_id) return true;
+        current = parent;
+    }
+    return false;
+}
+
+pub fn isNodeAncestor(self: *Self, node_id: Node.NodeId, maybe_descendant_id: Node.NodeId) bool {
+    return self.isNodeDescendant(maybe_descendant_id, node_id);
+}
+pub fn getLowestCommonAncestorAndFirstDistinctAncestor(self: *Self, a: Node.NodeId, b: Node.NodeId) struct {
+    ancestor: ?Node.NodeId,
+    distinct_a_child: ?Node.NodeId,
+    distinct_b_child: ?Node.NodeId,
+} {
+    // Same node check
+    if (a == b)
+        return .{ .ancestor = a, .distinct_a_child = null, .distinct_b_child = null };
+
+    // Find depths
+    var depth_a: usize = 0;
+    var depth_b: usize = 0;
+    var current = a;
+    while (self.getNode(current).parent) |parent| {
+        depth_a += 1;
+        current = parent;
+    }
+    current = b;
+    while (self.getNode(current).parent) |parent| {
+        depth_b += 1;
+        current = parent;
+    }
+
+    // Set x to deeper node, y to shallower node
+    var x, var y, const difference = if (depth_a >= depth_b) .{ a, b, depth_a - depth_b } else .{ b, a, depth_b - depth_a };
+
+    // Track child on deeper node's path
+    var distinctAncestorA: ?Node.NodeId = null;
+
+    // Move up from deeper node to equalize depths
+    for (0..difference) |_| {
+        distinctAncestorA = x;
+        x = self.getNode(x).parent orelse return .{ .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
+    }
+
+    // Track child on shallower node's path
+    var distinctAncestorB: ?Node.NodeId = null;
+
+    // Find LCA by moving up both nodes
+    while (x != y) {
+        distinctAncestorA = x;
+        distinctAncestorB = y;
+        x = self.getNode(x).parent orelse return .{ .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
+        y = self.getNode(y).parent orelse return .{ .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
+    }
+
+    // Swap back to ensure children match original a and b
+    if (depth_a < depth_b) {
+        std.mem.swap(?Node.NodeId, &distinctAncestorA, &distinctAncestorB);
+    }
+
+    return .{ .ancestor = x, .distinct_a_child = distinctAncestorA, .distinct_b_child = distinctAncestorB };
+}
+
+/// An object A is called a sibling of an object B, if and only if B and A share the same non-null parent.
+pub fn isNodeSibling(self: *Self, node_id: Node.NodeId, maybe_sibling_id: Node.NodeId) bool {
+    if (node_id == maybe_sibling_id) return false;
+    const node_parent = self.getNode(node_id).parent;
+    if (node_parent == null) return false;
+
+    return self.getNode(maybe_sibling_id).parent == node_parent;
+}
+
+pub fn firstChild(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
+    const node = self.getNode(node_id);
+    if (node.children.items.len == 0) return null;
+    return node.children.items[0];
+}
+
+pub fn lastChild(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
+    const node = self.getNode(node_id);
+    if (node.children.items.len == 0) return null;
+    return node.children.items[node.children.items.len - 1];
+}
+
+pub fn nodeIndex(self: *Self, node_id: Node.NodeId) ?usize {
+    const node = self.getNode(node_id);
+    const parent = node.parent orelse return null;
+    const siblings = self.getNodeChildren(parent);
+    return std.mem.indexOfScalar(Node.NodeId, siblings, node_id);
+}
+
+pub fn nextSibling(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
+    const node = self.getNode(node_id);
+    const parent = node.parent orelse return null;
+    const siblings = self.getNodeChildren(parent);
+
+    const index = std.mem.indexOfScalar(Node.NodeId, siblings, node_id) orelse return null;
+    if (index == siblings.len - 1) return null;
+    return siblings[index + 1];
+}
+pub fn previousSibling(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
+    const node = self.getNode(node_id);
+    const parent = node.parent orelse return null;
+    const siblings = self.getNodeChildren(parent);
+
+    const index = self.nodeIndex(node_id) orelse return null;
+    if (index == 0) return null;
+    return siblings[index - 1];
+}
+pub fn isSubsequentSibling(self: *Self, node_a: Node.NodeId, node_b: Node.NodeId) bool {
+    if (node_a == node_b) return false;
+    const a_parent = self.getNode(node_a).parent orelse return false;
+    const b_parent = self.getNode(node_b).parent orelse return false;
+    if (a_parent != b_parent) return false;
+    const siblings = self.getNodeChildren(a_parent);
+    const a_index = std.mem.indexOfScalar(Node.NodeId, siblings, node_a) orelse unreachable;
+    if (a_index == siblings.len - 1) return false;
+    for (siblings[a_index + 1 ..]) |child| {
+        if (child == node_b) return true;
+    }
+    return false;
+}
+const Order = std.math.Order;
+/// In tree order is preorder, depth-first traversal of a tree.
+pub fn treeOrder(self: *Self, node_a: Node.NodeId, node_b: Node.NodeId) !Order {
+    if (node_a == node_b) return .eq;
+    const lca = self.getLowestCommonAncestorAndFirstDistinctAncestor(node_a, node_b);
+    if (lca.ancestor == null) return error.NotInTheSameTree;
+    const distinct_a_child = lca.distinct_a_child orelse return .lt;
+    const distinct_b_child = lca.distinct_b_child orelse return .gt;
+    if (self.isSubsequentSibling(distinct_a_child, distinct_b_child)) return .lt;
+    return .gt;
+}
+
+test "treeOrder - comprehensive" {
+    var tree = try init(std.testing.allocator);
+    defer tree.deinit();
+
+    // Create a more complex tree structure
+    //                    root
+    //                   /    \
+    //                child_a  child_b
+    //               /  |  \    /   \
+    //     child_a_a child_a_b child_b_a child_b_b
+    //                 |
+    //             child_a_b_a
+
+    const root = try tree.createNode();
+    const child_a = try tree.createNode();
+    const child_b = try tree.createNode();
+    try tree.appendChild(root, child_a);
+    try tree.appendChild(root, child_b);
+
+    const child_a_a = try tree.createNode();
+    const child_a_b = try tree.createNode();
+    const child_a_c = try tree.createNode();
+    try tree.appendChild(child_a, child_a_a);
+    try tree.appendChild(child_a, child_a_b);
+    try tree.appendChild(child_a, child_a_c);
+
+    const child_b_a = try tree.createNode();
+    const child_b_b = try tree.createNode();
+    try tree.appendChild(child_b, child_b_a);
+    try tree.appendChild(child_b, child_b_b);
+
+    const child_a_b_a = try tree.createNode();
+    try tree.appendChild(child_a_b, child_a_b_a);
+
+    // Let's add some deeper nodes for more complex testing
+    const child_b_b_a = try tree.createNode();
+    try tree.appendChild(child_b_b, child_b_b_a);
+
+    const child_a_c_a = try tree.createNode();
+    const child_a_c_b = try tree.createNode();
+    try tree.appendChild(child_a_c, child_a_c_a);
+    try tree.appendChild(child_a_c, child_a_c_b);
+
+    // 1. Self comparison
+    try std.testing.expectEqual(try tree.treeOrder(root, root), .eq);
+    try std.testing.expectEqual(try tree.treeOrder(child_a, child_a), .eq);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_a_b_a), .eq);
+
+    // 2. Basic sibling order tests
+    try std.testing.expectEqual(try tree.treeOrder(child_a, child_b), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b, child_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_a, child_a_b), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b, child_a_c), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c, child_a_a), .gt);
+
+    // 3. Parent-child relationships
+    try std.testing.expectEqual(try tree.treeOrder(root, child_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a, root), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a, child_a_b), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b, child_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b, child_a_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_a_b), .gt);
+
+    // 4. Cross-branch comparisons
+    try std.testing.expectEqual(try tree.treeOrder(child_a_a, child_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b_a, child_a_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c, child_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b_a, child_a_c), .gt);
+
+    // 5. Deep cross-branch comparisons
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_b_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b_b_a, child_a_b_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c_a, child_b_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b_b_a, child_a_c_b), .gt);
+
+    // 6. Uncle/aunt to niece/nephew comparisons
+    try std.testing.expectEqual(try tree.treeOrder(child_a, child_b_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b_b_a, child_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c, child_a_b_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_a_c), .lt);
+
+    // 7. Nodes at different depths
+    try std.testing.expectEqual(try tree.treeOrder(child_a_a, child_a_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_a_c), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_a_c_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b_a, child_b_b_a), .lt);
+
+    // 8. Root comparisons
+    try std.testing.expectEqual(try tree.treeOrder(root, child_a_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(root, child_b_b_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c_b, root), .gt);
+
+    // 9. Test complex ancestor relationships
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c_a, child_a_c_b), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c_b, child_a_c_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_a_c_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_c_a, child_a_b_a), .gt);
+
+    // 10. Test modified tree structure
+    // Let's move a subtree and test the new relationships
+    tree.removeChild(child_a, child_a_b);
+    try tree.appendChild(child_b_a, child_a_b);
+
+    // Now child_a_b is under child_b_a
+    try std.testing.expectEqual(try tree.treeOrder(child_b_a, child_a_b), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b, child_b_a), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_a, child_a_b), .lt); // different branches now
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b, child_b_b), .lt); // now child_a_b comes before child_b_b
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, child_b_b), .lt); // child_a_b_a follows its parent
+
+    // 11. Test disconnected nodes
+    const disconnected1 = try tree.createNode();
+    const disconnected2 = try tree.createNode();
+
+    // Create a separate tree
+    const other_root = try tree.createNode();
+    const other_child = try tree.createNode();
+    try tree.appendChild(other_root, other_child);
+
+    // Test that comparing disconnected nodes returns an error
+    try std.testing.expectError(error.NotInTheSameTree, tree.treeOrder(disconnected1, disconnected2));
+    try std.testing.expectError(error.NotInTheSameTree, tree.treeOrder(root, disconnected1));
+    try std.testing.expectError(error.NotInTheSameTree, tree.treeOrder(disconnected1, root));
+
+    // Test that comparing nodes in separate trees returns an error
+    try std.testing.expectError(error.NotInTheSameTree, tree.treeOrder(root, other_root));
+    try std.testing.expectError(error.NotInTheSameTree, tree.treeOrder(other_child, child_a));
+    try std.testing.expectError(error.NotInTheSameTree, tree.treeOrder(child_b_b_a, other_child));
+
+    // 12. Test edge cases with root and direct children
+    try std.testing.expectEqual(try tree.treeOrder(root, child_a), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a, root), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(root, child_b), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_b, root), .gt);
+
+    // 13. Create a very deep tree to test performance with nodes at many different levels
+    var deep_node = child_b_b_a;
+    var deep_nodes = [_]Node.NodeId{undefined} ** 10;
+
+    for (0..10) |i| {
+        deep_nodes[i] = try tree.createNode();
+        try tree.appendChild(deep_node, deep_nodes[i]);
+        deep_node = deep_nodes[i];
+    }
+
+    // Test deep ancestor relationship
+    try std.testing.expectEqual(try tree.treeOrder(child_b_b, deep_nodes[9]), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(deep_nodes[9], child_b_b), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(deep_nodes[0], deep_nodes[9]), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(deep_nodes[9], deep_nodes[0]), .gt);
+
+    // 14. Test after more complex tree modifications
+    // Move a subtree to another part of the tree
+    tree.removeChild(child_b_a, child_a_b);
+    try tree.appendChild(deep_nodes[5], child_a_b);
+
+    try std.testing.expectEqual(try tree.treeOrder(deep_nodes[4], child_a_b), .lt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b, deep_nodes[6]), .gt);
+    try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, deep_nodes[9]), .gt);
 }
