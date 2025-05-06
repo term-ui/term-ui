@@ -317,7 +317,6 @@ export fn Tree_getNodeClientWidth(tree: *Tree, node_id: u32) f32 {
 
 const tree_dump_logger = std.log.scoped(.tree_dump);
 export fn Tree_dump(tree: *Tree) void {
-    // tree_dump_logger.info("Tree_dump({*})", .{tree});
     var array_list = std.ArrayList(u8).init(wasm_allocator);
     defer array_list.deinit();
     wasm_try(void, tree.print(array_list.writer().any()));

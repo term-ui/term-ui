@@ -4,7 +4,9 @@ const Array = std.ArrayListUnmanaged;
 const Self = @This();
 const Rect = @import("../../rect.zig").Rect;
 const styles = @import("../../../styles/styles.zig");
-text: Array(u8) = .{},
+const String = @import("../../tree/String.zig");
+
+text: String = .{},
 lines: Array(Line) = .{},
 arena: std.heap.ArenaAllocator,
 
