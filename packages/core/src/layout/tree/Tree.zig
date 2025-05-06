@@ -18,6 +18,7 @@ const StyleManager = s.style_manager.StyleManager;
 const InputManager = @import("../../cmd/input/manager.zig").AnyInputManager;
 const Event = @import("../../cmd/input/manager.zig").Event;
 const Selection = @import("Selection.zig");
+const String = @import("String.zig");
 
 node_map: std.AutoHashMapUnmanaged(Node.NodeId, Node) = .{},
 allocator: std.mem.Allocator,
@@ -78,8 +79,8 @@ pub inline fn isEmpty(self: *Self, id: Node.NodeId) bool {
 pub inline fn getStyle(self: *Self, id: Node.NodeId) *Style {
     return &self.getNode(id).styles;
 }
-pub inline fn getText(self: *Self, id: Node.NodeId) std.ArrayListUnmanaged(u8) {
-    return self.getNode(id).text;
+pub inline fn getText(self: *Self, id: Node.NodeId) *String {
+    return &self.getNode(id).text;
 }
 pub inline fn getParent(self: *Self, id: Node.NodeId) ?Node.NodeId {
     return self.getNode(id).parent;
@@ -113,7 +114,6 @@ pub fn setChildren(self: *Self, id: Node.NodeId, children: []Node.NodeId) !void 
     try list.appendSlice(self.allocator, children);
 }
 pub fn setStyle(self: *Self, id: Node.NodeId, style: Style) void {
-    self.getNode(id).styles.deinit();
     self.getNode(id).styles = style;
 
     // Mark node dirty for layout
@@ -124,11 +124,8 @@ pub fn setStyle(self: *Self, id: Node.NodeId, style: Style) void {
 }
 pub fn setText(self: *Self, id: Node.NodeId, text: []const u8) !void {
     var node = self.getNode(id);
-    if (std.mem.eql(u8, node.text.items, text)) {
-        return;
-    }
     node.text.clearRetainingCapacity();
-    try node.text.appendSlice(self.allocator, text);
+    try node.text.append(self.allocator, text);
     self.markDirty(id);
 }
 
@@ -341,7 +338,7 @@ fn printNode(self: *Self, writer: std.io.AnyWriter, node_id: Node.NodeId, indent
     const layout = self.getLayout(node_id);
     const kind = self.getNodeKind(node_id);
     if (kind == .text) {
-        try writer.print("[{s} #{d}] \"{s}\"\n", .{ @tagName(kind), node_id, self.getText(node_id).items });
+        try writer.print("[{s} #{d}] \"{s}\"\n", .{ @tagName(kind), node_id, self.getText(node_id).bytes.items });
     } else {
         const display = self.getStyle(node_id).display;
         const has_computed_text = self.getComputedText(node_id).* != null;

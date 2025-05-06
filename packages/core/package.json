@@ -1,7 +1,7 @@
 {
   "name": "@term-ui/core",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -36,5 +36,8 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist", "README.md"]
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }

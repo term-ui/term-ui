@@ -215,7 +215,7 @@ pub fn renderNode(self: *Self, tree: *Tree, node_id: NodeId, position: Point(f32
                 const part_computed_style = tree.getComputedStyle(part.node_id);
 
                 if (kind == .text) {
-                    const str = computed_text.text.items[part.start .. part.start + part.length];
+                    const str = computed_text.text.bytes.items[part.start .. part.start + part.length];
 
                     // Create text format from style properties
                     const text_format = Canvas.TextFormat.fromStyle(part_computed_style.font_weight, part_computed_style.font_style, part_computed_style.text_decoration);

@@ -13,12 +13,17 @@ const Style = @import("../../tree/Style.zig");
 const ComputedText = @import("./ComputedText.zig");
 const Segment = ComputedText.Segment;
 const TextPart = ComputedText.TextPart;
-const visible = @import("../../string-width.zig").visible;
 const Maybe = @import("../../utils/Maybe.zig");
 const assert = std.debug.assert;
 const logger = std.log.scoped(.compute_text_layout);
 const perform_child_layout = @import("../perform_child_layout.zig").perform_child_layout;
+const measureUtf8 = @import("../../../uni/string-width.zig").visible.width.exclude_ansi_colors.utf8;
+
 const LineBreak = @import("../../../uni/LineBreak.zig");
+
+fn measure(text: []const u8) f32 {
+    return @floatFromInt(measureUtf8(text));
+}
 
 inline fn collect(T: type, allocator: std.mem.Allocator, iterator: anytype) !Array(T) {
     var array = Array(T).init(allocator);
@@ -161,14 +166,14 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
 
     try collectText(allocator, &computed_text, &parts, node_id, node_id, tree, inputs);
 
-    var linebreak_iter = LineBreak.initAssumeValid(computed_text.text.items);
+    var linebreak_iter = LineBreak.initAssumeValid(computed_text.text.bytes.items);
     var segments = std.ArrayList(Segment).init(allocator);
     defer segments.deinit();
     var i: usize = 0;
     while (linebreak_iter.next()) |linebreak| {
         try segments.append(.{
             .index = i,
-            .text = computed_text.text.items[i..linebreak.i],
+            .text = computed_text.text.bytes.items[i..linebreak.i],
             .break_type = switch (linebreak.mandatory) {
                 true => .mandatory,
                 false => .allowed,
@@ -234,7 +239,7 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
             if (intersection_end > intersection_start) {
                 const node_kind = tree.getNodeKind(part.node_id);
                 assert(node_kind == .text);
-                const slice = std.mem.trimRight(u8, computed_text.text.items[intersection_start..intersection_end], "\n\r");
+                const slice = std.mem.trimRight(u8, computed_text.text.bytes.items[intersection_start..intersection_end], "\n\r");
                 var break_type = segment.break_type;
                 if (slice.len < intersection_end - intersection_start) {
                     break_type = .mandatory;
@@ -244,7 +249,7 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
                     .node_id = part.node_id,
                     .start = intersection_start,
                     .length = slice.len,
-                    .width = @as(f32, @floatFromInt(measureText(computed_text.text.items[intersection_start..intersection_end]))),
+                    .width = measure(slice),
                     .height = part.height,
                     .display = part.display,
                     .break_type = if (intersection_end == segment_end)
@@ -344,16 +349,14 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
         },
     };
 }
-fn measureText(text: []const u8) usize {
-    return visible.width.exclude_ansi_colors.utf8(text);
-}
+
 fn collectText(allocator: std.mem.Allocator, computed_text: *ComputedText, parts_array: *Array(TextPart), node_id: Node.NodeId, root_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !void {
     tree.setTextRootId(node_id, root_id);
     const display = tree.getComputedStyle(node_id).display;
 
     var part = TextPart{
         .node_id = node_id,
-        .start = computed_text.text.items.len,
+        .start = computed_text.text.length(),
         .length = 0,
         .break_type = .not_allowed,
         .display = display,
@@ -363,11 +366,11 @@ fn collectText(allocator: std.mem.Allocator, computed_text: *ComputedText, parts
     const node_kind = tree.getNodeKind(node_id);
     // if text node or if this is root (parts_array is empty)
     if (node_kind == .text) {
-        const start = computed_text.text.items.len;
-        try computed_text.appendText(tree.getText(node_id).items);
+        const start = computed_text.text.length();
+        try computed_text.text.concat(allocator, tree.getText(node_id));
         part.start = start;
-        part.length = tree.getText(node_id).items.len;
-        part.width = @as(f32, @floatFromInt(measureText(tree.getText(node_id).items)));
+        part.length = tree.getText(node_id).length();
+        part.width = tree.getText(node_id).measure();
         part.height = 1.0;
 
         try parts_array.append(part);
