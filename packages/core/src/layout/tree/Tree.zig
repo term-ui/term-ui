@@ -17,9 +17,11 @@ const ComputedStyleCache = s.computed_style.ComputedStyleCache;
 const StyleManager = s.style_manager.StyleManager;
 const InputManager = @import("../../cmd/input/manager.zig").AnyInputManager;
 const Event = @import("../../cmd/input/manager.zig").Event;
-const Selection = @import("Selection.zig");
 const String = @import("String.zig");
-
+const Range = @import("Range.zig");
+const BoundaryPoint = Range.BoundaryPoint;
+const NodeIterator = @import("NodeIterator.zig");
+const traversal = @import("./traversal.zig");
 node_map: std.AutoHashMapUnmanaged(Node.NodeId, Node) = .{},
 allocator: std.mem.Allocator,
 style_manager: StyleManager,
@@ -27,6 +29,9 @@ computed_style_cache: ComputedStyleCache,
 input_manager: ?InputManager = null,
 
 node_id_counter: Node.NodeId = 0,
+
+live_ranges: std.AutoHashMapUnmanaged(u32, Range) = .{},
+live_range_counter: u32 = 0,
 
 const Self = @This();
 
@@ -56,6 +61,22 @@ pub fn disableInputManager(self: *Self) void {
     if (self.input_manager) |*manager| {
         manager.unsubscribe(@ptrCast(self));
     }
+}
+pub fn createLiveRange(self: *Self, start: BoundaryPoint, end: BoundaryPoint) !Range.Id {
+    const id = self.live_range_counter;
+    self.live_range_counter += 1;
+    try self.live_ranges.put(
+        self.allocator,
+        id,
+        try Range.init(self, id, start, end),
+    );
+    return id;
+}
+pub fn iterLiveRanges(self: *Self) std.AutoHashMapUnmanaged(Range.Id, Range).ValueIterator {
+    return self.live_ranges.valueIterator();
+}
+pub fn getLiveRange(self: *Self, id: Range.Id) *Range {
+    return self.live_ranges.getPtr(id).?;
 }
 fn emitEventFn(context: *anyopaque, event: Event) void {
     _ = event; // autofix
@@ -129,16 +150,20 @@ pub fn setText(self: *Self, id: Node.NodeId, text: []const u8) !void {
     self.markDirty(id);
 }
 
-pub fn setParent(self: *Self, id: Node.NodeId, parent: ?Node.NodeId) void {
+pub fn setParent(self: *Self, id: Node.NodeId, parent: ?Node.NodeId) !void {
     var node = self.getNode(id);
     if (node.parent == parent) {
         return;
     }
 
     if (node.parent) |current_parent_id| {
-        self.removeChild(current_parent_id, id);
+        try self.removeChild(current_parent_id, id);
     }
     node.parent = parent;
+}
+pub fn removeNode(self: *Self, id: Node.NodeId) !void {
+    const parent_id = self.getNode(id).parent orelse return;
+    try self.removeChild(parent_id, id);
 }
 pub fn setUnroundedLayout(self: *Self, id: Node.NodeId, unrounded_layout: Layout) void {
     self.getNode(id).unrounded_layout = unrounded_layout;
@@ -199,25 +224,25 @@ pub fn markDirty(self: *Self, id: Node.NodeId) void {
     }
 }
 
-pub fn destroyNode(self: *Self, id: Node.NodeId) void {
+pub fn destroyNode(self: *Self, id: Node.NodeId) !void {
     const node = self.getNode(id);
     for (node.children.items) |child_id| {
         var child = self.getNode(child_id);
         child.parent = null;
     }
-    self.setParent(id, null);
+    try self.setParent(id, null);
 
     node.deinit(self.allocator);
     _ = self.node_map.remove(id);
 }
-pub fn destroyNodeRecursive(self: *Self, id: Node.NodeId) void {
-    self.setParent(id, null);
-    self.destroyNodeRecursiveInner(id);
+pub fn destroyNodeRecursive(self: *Self, id: Node.NodeId) !void {
+    try self.setParent(id, null);
+    try self.destroyNodeRecursiveInner(id);
 }
-fn destroyNodeRecursiveInner(self: *Self, id: Node.NodeId) void {
+fn destroyNodeRecursiveInner(self: *Self, id: Node.NodeId) !void {
     const node = self.getNode(id);
     for (node.children.items) |child_id| {
-        self.destroyNodeRecursiveInner(child_id);
+        try self.destroyNodeRecursiveInner(child_id);
     }
     node.deinit(self.allocator);
     _ = self.node_map.remove(id);
@@ -234,6 +259,19 @@ pub fn createNode(self: *Self) !Node.NodeId {
 
     return id;
 }
+pub fn validateTree(self: *Self, node_id: Node.NodeId, expected_parent: ?Node.NodeId) void {
+    const node = self.getNode(node_id);
+    if (node.kind == .text) {
+        return;
+    }
+    if (node.parent != expected_parent) {
+        std.debug.panic("Node {d} has parent {?d} but expected {?d}\n", .{ node_id, node.parent, expected_parent });
+    }
+    const children = node.children;
+    for (children.items) |child_id| {
+        self.validateTree(child_id, node_id);
+    }
+}
 
 pub fn createTextNode(self: *Self, text: []const u8) !Node.NodeId {
     const id = self.node_id_counter;
@@ -249,48 +287,407 @@ pub fn createTextNode(self: *Self, text: []const u8) !Node.NodeId {
 
     return id;
 }
-pub fn appendChildAtIndex(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId, index: usize) !void {
-    self.setParent(child_id, parent_id);
-    var parent = self.getNode(parent_id);
-
-    if (index >= parent.children.items.len) {
-        try parent.children.append(self.allocator, child_id);
-    } else {
-        try parent.children.insert(self.allocator, index, child_id);
+fn maybeRemoveNode(self: *Self, node_id: Node.NodeId) !void {
+    if (self.getParent(node_id)) |parent_id| {
+        try self.removeChild(parent_id, node_id);
     }
-    self.markDirty(parent_id);
+}
+pub fn appendChildAtIndex(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId, index: usize) !Node.NodeId {
+    const siblings = self.getNode(parent_id).children;
+    const node_at_index = if (index >= siblings.items.len) null else siblings.items[index];
+
+    return try self.insertBefore(child_id, node_at_index);
 }
 
-pub fn appendChild(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId) !void {
-    self.setParent(child_id, parent_id);
-    var parent = self.getNode(parent_id);
-    try parent.children.append(self.allocator, child_id);
-    self.markDirty(parent_id);
+pub fn appendChild(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId) !Node.NodeId {
+    // self.setParent(child_id, parent_id);
+    // var parent = self.getNode(parent_id);
+    // try parent.children.append(self.allocator, child_id);
+    // self.markDirty(parent_id);
+    return try self.preInsert(child_id, parent_id, null);
 }
-pub fn insertBefore(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId, before_id: Node.NodeId) !void {
-    self.setParent(child_id, parent_id);
-    // var child = self.getNode(child_id);
-    var parent = self.getNode(parent_id);
-    const index = std.mem.indexOfScalar(Node.NodeId, parent.children.items, before_id);
-    if (index) |i| {
-        try parent.children.insert(self.allocator, i, child_id);
-    } else {
-        try parent.children.append(self.allocator, child_id);
+// Helper function to implement ensure pre-insert validity
+fn ensurePreInsertValidity(self: *Self, node: Node.NodeId, parent: Node.NodeId, child: ?Node.NodeId) !void {
+    const parent_node = self.getNode(parent);
+    const node_kind = self.getNode(node).kind;
+
+    // 1. If parent is not a Document, DocumentFragment, or Element node, throw "HierarchyRequestError"
+    if (parent_node.kind != .node) {
+        std.debug.print("Parent {?d} is not a Document, DocumentFragment, or Element node\n", .{parent});
+        // Adjust as needed if you add document or document fragment support
+        return error.HierarchyRequestError;
     }
-    self.markDirty(parent_id);
+
+    // 2. If node is a host-including inclusive ancestor of parent, throw "HierarchyRequestError"
+    if (self.isNodeAncestor(node, parent)) {
+        return error.HierarchyRequestError;
+    }
+
+    // 3. If child is non-null and its parent is not parent, throw "NotFoundError"
+    if (child != null and self.getParent(child.?) != parent) {
+        return error.NotFoundError;
+    }
+
+    // 4. If node is not a DocumentFragment, DocumentType, Element, or CharacterData node, throw "HierarchyRequestError"
+    if (node_kind != .node and node_kind != .text) {
+        // Adjust as needed when you add document fragment support
+        return error.HierarchyRequestError;
+    }
+
+    // The remaining checks (5 and 6) are primarily concerned with Document nodes
+    // Since you don't have Document nodes, they can be omitted
+}
+pub fn preInsert(self: *Self, node: Node.NodeId, parent: Node.NodeId, child: ?Node.NodeId) !Node.NodeId {
+    // 1. Ensure pre-insert validity of node into parent before child.
+    try ensurePreInsertValidity(self, node, parent, child);
+
+    // 2. Let referenceChild be child.
+    var reference_child = child;
+
+    // 3. If referenceChild is node, then set referenceChild to node's next sibling.
+    if (reference_child == node) {
+        reference_child = self.nextSibling(node);
+    }
+
+    // 4. Insert node into parent before referenceChild.
+    try self.insertBeforeChecked(node, parent, reference_child);
+
+    // 5. Return node.
+    return node;
 }
 
-pub fn removeChild(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId) void {
-    var parent = self.getNode(parent_id);
-    const index = std.mem.indexOfScalar(Node.NodeId, parent.children.items, child_id);
-    if (index) |i| {
-        _ = parent.children.orderedRemove(i);
-    } else {
+fn insertBeforeChecked(self: *Self, node_id: Node.NodeId, parent: Node.NodeId, child: ?Node.NodeId) !void {
+    // 1.  Let nodes be node’s [children](#concept-tree-child), if node is a `[DocumentFragment](#documentfragment)` [node](#concept-node); otherwise « node ».
+    // FIXME: add support for DocumentFragment once we have it
+    const nodes = &[_]Node.NodeId{node_id};
+
+    // 2.  Let count be nodes’s [size](https://infra.spec.whatwg.org/#list-size).
+    const count = nodes.len;
+
+    // 3.  If count is 0, then return.
+    if (count == 0) {
         return;
     }
-    // dont call setParent to avoid infinite loop
-    self.getNode(child_id).parent = null;
+
+    // 4.  If node is a `[DocumentFragment](#documentfragment)` [node](#concept-node):
+
+    //     1.  [Remove](#concept-node-remove) its [children](#concept-tree-child) with the _suppress observers flag_ set.
+
+    //     2.  [Queue a tree mutation record](#queue-a-tree-mutation-record) for node with « », nodes, null, and null.
+
+    //         This step intentionally does not pay attention to the _suppress observers flag_.
+
+    // 5.  If child is non-null:
+    if (child) |child_id| {
+
+        //     1.  For each [live range](#concept-live-range) whose [start node](#concept-range-start-node) is parent and [start offset](#concept-range-start-offset) is greater than child’s [index](#concept-tree-index), increase its [start offset](#concept-range-start-offset) by count.
+        {
+            var it = self.iterLiveRanges();
+            while (it.next()) |live_range| {
+                if (live_range.start.node_id == parent and live_range.start.offset > child_id) {
+                    live_range.start.offset += count;
+                }
+            }
+        }
+
+        //     2.  For each [live range](#concept-live-range) whose [end node](#concept-range-end-node) is parent and [end offset](#concept-range-end-offset) is greater than child’s [index](#concept-tree-index), increase its [end offset](#concept-range-end-offset) by count.
+        {
+            var it = self.iterLiveRanges();
+            while (it.next()) |live_range| {
+                if (live_range.end.node_id == parent and live_range.end.offset > child_id) {
+                    live_range.end.offset += count;
+                }
+            }
+        }
+    }
+
+    // 6.  Let previousSibling be child’s [previous sibling](#concept-tree-previous-sibling) or parent’s [last child](#concept-tree-last-child) if child is null.
+    const previous_sibling = if (child) |child_id| self.previousSibling(child_id) else self.lastChild(parent);
+    std.debug.print("parent: {d}, previous_sibling: {?}\n", .{ parent, previous_sibling });
+
+    // 7.  For each node in nodes, in [tree order](#concept-tree-order):
+    for (nodes) |node| {
+
+        //     1.  [Adopt](#concept-node-adopt) node into parent’s [node document](#concept-node-document).
+
+        //     2.  If child is null, then [append](https://infra.spec.whatwg.org/#set-append) node to parent’s [children](#concept-tree-child).
+        if (child) |child_id| {
+            // 3.  Otherwise, [insert](https://infra.spec.whatwg.org/#list-insert) node into parent’s [children](#concept-tree-child) before child’s [index](#concept-tree-index).
+            // To insert an item into a list before an index is to add the given item to the list between the given index − 1 and the given index. If the given index is 0, then prepend the given item to the list.
+            // var siblings = self.getNode(parent).children;
+            var parent_node = self.getNode(parent);
+            const index = std.mem.indexOfScalar(Node.NodeId, parent_node.children.items, child_id);
+            if (index) |i| {
+                try self.maybeRemoveNode(node);
+                try parent_node.children.insert(self.allocator, i, node);
+            } else {
+                try self.maybeRemoveNode(node);
+                try parent_node.children.append(self.allocator, node);
+            }
+            var node_node = self.getNode(node);
+            node_node.parent = parent;
+        } else {
+            try self.maybeRemoveNode(node);
+            var parent_node = self.getNode(parent);
+            try parent_node.children.append(self.allocator, node);
+            var node_node = self.getNode(node);
+            node_node.parent = parent;
+        }
+
+        //     4.  If parent is a [shadow host](#element-shadow-host) whose [shadow root](#concept-shadow-root)’s [slot assignment](#shadowroot-slot-assignment) is "`named`" and node is a [slottable](#concept-slotable), then [assign a slot](#assign-a-slot) for node.
+
+        //     5.  If parent’s [root](#concept-tree-root) is a [shadow root](#concept-shadow-root), and parent is a [slot](#concept-slot) whose [assigned nodes](#slot-assigned-nodes) is the empty list, then run [signal a slot change](#signal-a-slot-change) for parent.
+
+        //     6.  Run [assign slottables for a tree](#assign-slotables-for-a-tree) with node’s [root](#concept-tree-root).
+
+        //     7.  For each [shadow-including inclusive descendant](#concept-shadow-including-inclusive-descendant) inclusiveDescendant of node, in [shadow-including tree order](#concept-shadow-including-tree-order):
+
+        //         1.  Run the [insertion steps](#concept-node-insert-ext) with inclusiveDescendant.
+
+        //         2.  If inclusiveDescendant is not [connected](#connected), then [continue](https://infra.spec.whatwg.org/#iteration-continue).
+
+        //         3.  If inclusiveDescendant is an [element](#concept-element):
+
+        //             1.  If inclusiveDescendant’s [custom element registry](#element-custom-element-registry) is null, then set inclusiveDescendant’s [custom element registry](#element-custom-element-registry) to the result of [looking up a custom element registry](https://html.spec.whatwg.org/multipage/custom-elements.html#look-up-a-custom-element-registry) given inclusiveDescendant’s [parent](#concept-tree-parent).
+
+        //             2.  Otherwise, if inclusiveDescendant’s [custom element registry](#element-custom-element-registry)’s [is scoped](https://html.spec.whatwg.org/multipage/custom-elements.html#is-scoped) is true, [append](https://infra.spec.whatwg.org/#set-append) inclusiveDescendant’s [node document](#concept-node-document) to inclusiveDescendant’s [custom element registry](#element-custom-element-registry)’s [scoped document set](https://html.spec.whatwg.org/multipage/custom-elements.html#scoped-document-set).
+
+        //             3.  If inclusiveDescendant is [custom](#concept-element-custom), then [enqueue a custom element callback reaction](https://html.spec.whatwg.org/multipage/custom-elements.html#enqueue-a-custom-element-callback-reaction) with inclusiveDescendant, callback name "`connectedCallback`", and « ».
+
+        //             4.  Otherwise, [try to upgrade](https://html.spec.whatwg.org/multipage/custom-elements.html#concept-try-upgrade) inclusiveDescendant.
+
+        //                 If this successfully upgrades inclusiveDescendant, its `connectedCallback` will be enqueued automatically during the [upgrade an element](https://html.spec.whatwg.org/multipage/custom-elements.html#concept-upgrade-an-element) algorithm.
+
+        //         4.  Otherwise, if inclusiveDescendant is a [shadow root](#concept-shadow-root):
+
+        //             1.  If inclusiveDescendant’s [custom element registry](#shadowroot-custom-element-registry) is null and inclusiveDescendant’s [keep custom element registry null](#shadowroot-keep-custom-element-registry-null) is false, then set inclusiveDescendant’s [custom element registry](#shadowroot-custom-element-registry) to the result of [looking up a custom element registry](https://html.spec.whatwg.org/multipage/custom-elements.html#look-up-a-custom-element-registry) given inclusiveDescendant’s [host](#concept-documentfragment-host).
+
+        //             2.  Otherwise, if inclusiveDescendant’s [custom element registry](#shadowroot-custom-element-registry) is non-null and inclusiveDescendant’s [custom element registry](#shadowroot-custom-element-registry)’s [is scoped](https://html.spec.whatwg.org/multipage/custom-elements.html#is-scoped) is true, [append](https://infra.spec.whatwg.org/#set-append) inclusiveDescendant’s [node document](#concept-node-document) to inclusiveDescendant’s [custom element registry](#shadowroot-custom-element-registry)’s [scoped document set](https://html.spec.whatwg.org/multipage/custom-elements.html#scoped-document-set).
+    }
+    // 8.  If _suppress observers flag_ is unset, then [queue a tree mutation record](#queue-a-tree-mutation-record) for parent with nodes, « », previousSibling, and child.
+
+    // 9.  Run the [children changed steps](#concept-node-children-changed-ext) for parent.
+
+    // 10.  Let staticNodeList be a [list](https://infra.spec.whatwg.org/#list) of [nodes](#concept-node), initially « ».
+
+    //     We collect all [nodes](#concept-node) _before_ calling the [post-connection steps](#concept-node-post-connection-ext) on any one of them, instead of calling the [post-connection steps](#concept-node-post-connection-ext) _while_ we’re traversing the [node tree](#concept-node-tree). This is because the [post-connection steps](#concept-node-post-connection-ext) can modify the tree’s structure, making live traversal unsafe, possibly leading to the [post-connection steps](#concept-node-post-connection-ext) being called multiple times on the same [node](#boundary-point-node).
+
+    // 11.  For each node of nodes, in [tree order](#concept-tree-order):
+
+    //     1.  For each [shadow-including inclusive descendant](#concept-shadow-including-inclusive-descendant) inclusiveDescendant of node, in [shadow-including tree order](#concept-shadow-including-tree-order), [append](https://infra.spec.whatwg.org/#list-append) inclusiveDescendant to staticNodeList.
+
+    // 12.  [For each](https://infra.spec.whatwg.org/#list-iterate) node of staticNodeList, if node is [connected](#connected), then run the [post-connection steps](#concept-node-post-connection-ext) with node.
+}
+
+fn liveRangePreRemoveSteps(self: *Self, node_id: Node.NodeId) !void {
+    // 1.  Let parent be node’s [parent](#concept-tree-parent).
+    const parent = self.getNode(node_id).parent orelse unreachable;
+
+    // 2.  [Assert](https://infra.spec.whatwg.org/#assert): parent is not null.
+
+    // 3.  Let index be node’s [index](#concept-tree-index).
+    const index: u32 = @intCast(self.nodeIndex(node_id) orelse unreachable);
+
+    var it = self.iterLiveRanges();
+    while (it.next()) |live_range| {
+        // 4.  For each [live range](#concept-live-range) whose [start node](#concept-range-start-node) is an [inclusive descendant](#concept-tree-inclusive-descendant) of node, set its [start](#concept-range-start) to (parent, index).
+        if (live_range.start.node_id == node_id) {
+            live_range.start = .{ .node_id = parent, .offset = index };
+        }
+
+        // 5.  For each [live range](#concept-live-range) whose [end node](#concept-range-end-node) is an [inclusive descendant](#concept-tree-inclusive-descendant) of node, set its [end](#concept-range-end) to (parent, index).
+        if (live_range.end.node_id == node_id) {
+            live_range.end = .{ .node_id = parent, .offset = index };
+        }
+
+        // 6.  For each [live range](#concept-live-range) whose [start node](#concept-range-start-node) is parent and [start offset](#concept-range-start-offset) is greater than index, decrease its [start offset](#concept-range-start-offset) by 1.
+        if (live_range.start.node_id == parent and live_range.start.offset > index) {
+            live_range.start.offset -= 1;
+        }
+
+        // 7.  For each [live range](#concept-live-range) whose [end node](#concept-range-end-node) is parent and [end offset](#concept-range-end-offset) is greater than index, decrease its [end offset](#concept-range-end-offset) by 1.
+        if (live_range.end.node_id == parent and live_range.end.offset > index) {
+            live_range.end.offset -= 1;
+        }
+    }
+}
+const RemoveError = error{NotFound};
+pub fn preRemove(self: *Self, parent_id: Node.NodeId, node_id: Node.NodeId) !void {
+    // To pre-remove a child from a parent, run these steps:
+    if (self.getNode(node_id).parent != parent_id) {
+        return error.NotFound;
+    }
+    // If child’s parent is not parent, then throw a "NotFoundError" DOMException.
+
+    // Remove child.
+
+    // Return child.
+    return self.removeChildChecked(node_id);
+}
+fn removeChildChecked(self: *Self, node_id: Node.NodeId) RemoveError!void {
+
+    // 1.  Let parent be node’s [parent](#concept-tree-parent).
+    const parent_id = self.getNode(node_id).parent orelse unreachable;
+
+    // 2.  Assert: parent is non-null.
+
+    // 3.  Run the [live range pre-remove steps](#live-range-pre-remove-steps), given node.
+    try self.liveRangePreRemoveSteps(node_id);
+    // 4.  For each `[NodeIterator](#nodeiterator)` object iterator whose [root](#concept-traversal-root)’s [node document](#concept-node-document) is node’s [node document](#concept-node-document), run the [`NodeIterator` pre-remove steps](#nodeiterator-pre-removing-steps) given node and iterator.
+    // 5.  Let oldPreviousSibling be node’s [previous sibling](#concept-tree-previous-sibling).
+
+    // 6.  Let oldNextSibling be node’s [next sibling](#concept-tree-next-sibling).
+    // autofix
+    // 7.  [Remove](https://infra.spec.whatwg.org/#list-remove) node from its parent’s [children](#concept-tree-child).
+    var parent = self.getNode(parent_id);
+    const index = std.mem.indexOfScalar(Node.NodeId, parent.children.items, node_id) orelse unreachable;
+    _ = parent.children.orderedRemove(index);
+    self.getNode(node_id).parent = null;
     self.markDirty(parent_id);
+
+    // 8.  If node is [assigned](#slotable-assigned), then run [assign slottables](#assign-slotables) for node’s [assigned slot](#slotable-assigned-slot).
+
+    // 9.  If parent’s [root](#concept-tree-root) is a [shadow root](#concept-shadow-root), and parent is a [slot](#concept-slot) whose [assigned nodes](#slot-assigned-nodes) is the empty list, then run [signal a slot change](#signal-a-slot-change) for parent.
+
+    // 10.  If node has an [inclusive descendant](#concept-tree-inclusive-descendant) that is a [slot](#concept-slot):
+
+    //     1.  Run [assign slottables for a tree](#assign-slotables-for-a-tree) with parent’s [root](#concept-tree-root).
+
+    //     2.  Run [assign slottables for a tree](#assign-slotables-for-a-tree) with node.
+
+    // 11.  Run the [removing steps](#concept-node-remove-ext) with node and parent.
+
+    // 12.  Let isParentConnected be parent’s [connected](#connected).
+
+    // 13.  If node is [custom](#concept-element-custom) and isParentConnected is true, then [enqueue a custom element callback reaction](https://html.spec.whatwg.org/multipage/custom-elements.html#enqueue-a-custom-element-callback-reaction) with node, callback name "`disconnectedCallback`", and « ».
+
+    //     It is intentional for now that [custom](#concept-element-custom) [elements](#concept-element) do not get parent passed. This might change in the future if there is a need.
+
+    // 14.  For each [shadow-including descendant](#concept-shadow-including-descendant) descendant of node, in [shadow-including tree order](#concept-shadow-including-tree-order):
+
+    //     1.  Run the [removing steps](#concept-node-remove-ext) with descendant and null.
+
+    //     2.  If descendant is [custom](#concept-element-custom) and isParentConnected is true, then [enqueue a custom element callback reaction](https://html.spec.whatwg.org/multipage/custom-elements.html#enqueue-a-custom-element-callback-reaction) with descendant, callback name "`disconnectedCallback`", and « ».
+
+    // 15.  For each [inclusive ancestor](#concept-tree-inclusive-ancestor) inclusiveAncestor of parent, and then [for each](https://infra.spec.whatwg.org/#list-iterate) registered of inclusiveAncestor’s [registered observer list](#registered-observer-list), if registered’s [options](#registered-observer-options)\["`[subtree](#dom-mutationobserverinit-subtree)`"\] is true, then [append](https://infra.spec.whatwg.org/#list-append) a new [transient registered observer](#transient-registered-observer) whose [observer](#registered-observer-observer) is registered’s [observer](#registered-observer-observer), [options](#registered-observer-options) is registered’s [options](#registered-observer-options), and [source](#transient-registered-observer-source) is registered to node’s [registered observer list](#registered-observer-list).
+
+    // 16.  If _suppress observers flag_ is unset, then [queue a tree mutation record](#queue-a-tree-mutation-record) for parent with « », « node », oldPreviousSibling, and oldNextSibling.
+
+    // 17.  Run the [children changed steps](#concept-node-children-changed-ext) for parent.
+}
+pub fn removeChild(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId) !void {
+    try self.preRemove(parent_id, child_id);
+}
+
+pub fn replaceChild(self: *Self, new_node_id: Node.NodeId, old_child_id: Node.NodeId) !Node.NodeId {
+    // Find the parent of the node being replaced
+    const parent_id = self.getNode(old_child_id).parent orelse return error.NotFound;
+
+    // 3. If child's parent is not parent, then throw a "NotFoundError" DOMException.
+    // (This is already handled by getting the parent above)
+
+    // Check for hierarchical issues (node being a host-including ancestor of parent)
+    // (Implementation dependent on your tree structure)
+
+    // 7. Let referenceChild be child's next sibling
+    var reference_child = traversal.nextSibling(self, old_child_id);
+
+    // 8. If referenceChild is node, then set referenceChild to node's next sibling
+    if (reference_child == new_node_id) {
+        reference_child = traversal.nextSibling(self, new_node_id);
+    }
+
+    // 11. Remove the old child
+    try self.removeChild(parent_id, old_child_id);
+
+    // 12. Let nodes be node's children if node is a DocumentFragment node; otherwise « node ».
+    // FIXME: uncomment this once we have a document fragment
+    // const nodes: []const Node.NodeId = if (self.getNodeKind(new_node_id) == .document_fragment) self.getChildren(new_node_id).items else &.{new_node_id};
+    const nodes: []const Node.NodeId = &.{new_node_id};
+
+    // 13. Insert each node before the reference child
+    for (nodes) |node_to_insert| {
+        _ = try self.insertBefore(node_to_insert, reference_child);
+        std.debug.print("replaceChild {d} {d}\n", .{ old_child_id, new_node_id });
+    }
+
+    // 15. Return the removed child
+    return old_child_id;
+}
+test "Tree.replaceChild" {
+    var tree = try init(std.testing.allocator);
+    defer tree.deinit();
+
+    const root = try tree.createNode();
+    defer tree.validateTree(root, null);
+    for (0..5) |i| {
+        _ = i; // autofix
+        const child = try tree.createNode();
+        _ = try tree.appendChild(root, child);
+    }
+    const to_replace = try tree.createNode();
+    try tree.expectNodes(0, "<0><1></1><2></2><3></3><4></4><5></5></0>", null);
+    _ = try tree.replaceChild(to_replace, 3);
+    try tree.expectNodes(0, "<0><1></1><2></2><6></6><4></4><5></5></0>", null);
+}
+
+pub fn insertBefore(self: *Self, node: Node.NodeId, child: ?Node.NodeId) !Node.NodeId {
+    const parent = self.getNode(child orelse return error.NotFound).parent orelse return error.NotFound;
+    return try self.preInsert(node, parent, child);
+}
+test "Tree.insertBefore" {
+    var tree = try parseTree(std.testing.allocator, "<element><text>World</text></element>");
+    defer tree.deinit();
+    defer tree.validateTree(0, null);
+    try tree.expectNodes(0, "<0><1><text#2>'World'</text#2></1></0>", null);
+    const hello_node = try tree.createTextNode("Hello ");
+    _ = try tree.insertBefore(hello_node, 2);
+    try tree.expectNodes(0, "<0><1><text#3>'Hello '</text#3><text#2>'World'</text#2></1></0>", null);
+}
+
+test "Tree.removeChild" {
+    {
+        var tree = try parseTree(std.testing.allocator, "<element><text>World</text></element>");
+        defer tree.deinit();
+        defer tree.validateTree(0, null);
+
+        try tree.expectNodes(0, "<0><1><text#2>'World'</text#2></1></0>", null);
+        try tree.removeChild(0, 1);
+        try tree.expectNodes(0, "<0></0>", null);
+    }
+    {
+        var tree = try parseTree(std.testing.allocator, "<element><text>World</text></element>");
+
+        defer tree.deinit();
+        defer tree.validateTree(0, null);
+        try tree.expectNodes(0, "<0><1><text#2>'World'</text#2></1></0>", null);
+        try tree.removeChild(1, 2);
+        try tree.expectNodes(0, "<0><1></1></0>", null);
+    }
+
+    {
+        var tree = try init(std.testing.allocator);
+
+        defer tree.deinit();
+        defer tree.validateTree(0, null);
+        const root = try tree.createNode();
+        for (0..5) |i| {
+            _ = i; // autofix
+            const child = try tree.createNode();
+            _ = try tree.appendChild(root, child);
+        }
+        try tree.expectNodes(0, "<0><1></1><2></2><3></3><4></4><5></5></0>", null);
+        try tree.removeChild(0, 2);
+        try tree.expectNodes(0, "<0><1></1><3></3><4></4><5></5></0>", null);
+        try tree.removeChild(0, 5);
+        try tree.expectNodes(0, "<0><1></1><3></3><4></4></0>", null);
+        try tree.removeChild(0, 4);
+        try tree.expectNodes(0, "<0><1></1><3></3></0>", null);
+        try tree.removeChild(0, 3);
+        try tree.expectNodes(0, "<0><1></1></0>", null);
+        try tree.removeChild(0, 1);
+        try tree.expectNodes(0, "<0></0>", null);
+    }
 }
 pub fn removeChildren(self: *Self, parent_id: Node.NodeId) void {
     var node = self.getNode(parent_id);
@@ -302,6 +699,137 @@ pub fn removeChildren(self: *Self, parent_id: Node.NodeId) void {
     }
     node.children.clearRetainingCapacity();
     self.markDirty(parent_id);
+}
+pub fn normalize(self: *Self, node_id: Node.NodeId) !void {
+    // Process each child node
+    var current_index: usize = 0;
+
+    // Don't store children outside the loop - always access it directly
+    while (current_index < self.getNode(node_id).children.items.len) {
+        // Get child_id directly from the current tree state
+        const child_id = self.getNode(node_id).children.items[current_index];
+
+        // If not a text node, normalize its children and move on
+        if (self.getNodeKind(child_id) != .text) {
+            try self.normalize(child_id);
+            current_index += 1;
+            continue;
+        }
+
+        // Handle empty text nodes - step 2
+        if (self.getNode(child_id).length() == 0) {
+            try self.removeChild(node_id, child_id);
+            // Don't increment current_index as the array has shifted
+            continue;
+        }
+
+        // Look for contiguous text nodes - steps 3-7
+        var next_index = current_index + 1;
+        var has_adjacent_text = false;
+
+        // Check if there are adjacent text nodes - always use the current state
+        while (next_index < self.getNode(node_id).children.items.len) {
+            const next_child = self.getNode(node_id).children.items[next_index];
+            if (self.getNodeKind(next_child) != .text) break;
+            has_adjacent_text = true;
+            next_index += 1;
+        }
+
+        // If we have adjacent text nodes, merge them
+        if (has_adjacent_text) {
+            var data = std.ArrayList(u8).init(self.allocator);
+            defer data.deinit();
+
+            // Get the first text node's content
+            try data.appendSlice(self.getText(child_id).bytes.items);
+            var length: u32 = @intCast(self.getNode(child_id).length());
+
+            // Store the IDs of text nodes to remove in a separate array
+            var to_remove = std.ArrayList(Node.NodeId).init(self.allocator);
+            defer to_remove.deinit();
+
+            // Process adjacent text nodes - step 6
+            var node_to_process = current_index + 1;
+            while (node_to_process < next_index) {
+                // Always get the current state
+                const text_node = self.getNode(node_id).children.items[node_to_process];
+                try to_remove.append(text_node);
+
+                // Update live ranges - steps 6.1-6.4
+                var it = self.iterLiveRanges();
+                while (it.next()) |live_range| {
+                    // 6.1: If start node is this text node
+                    if (live_range.start.node_id == text_node) {
+                        live_range.start.node_id = child_id;
+                        live_range.start.offset += length;
+                    }
+
+                    // 6.2: If end node is this text node
+                    if (live_range.end.node_id == text_node) {
+                        live_range.end.node_id = child_id;
+                        live_range.end.offset += length;
+                    }
+
+                    // 6.3 & 6.4: Handle ranges that point to the parent at this index
+                    if (live_range.start.node_id == node_id and
+                        live_range.start.offset == node_to_process)
+                    {
+                        live_range.start.node_id = child_id;
+                        live_range.start.offset = length;
+                    }
+
+                    if (live_range.end.node_id == node_id and
+                        live_range.end.offset == node_to_process)
+                    {
+                        live_range.end.node_id = child_id;
+                        live_range.end.offset = length;
+                    }
+                }
+
+                // 6.5: Add this node's text to our buffer
+                try data.appendSlice(self.getText(text_node).bytes.items);
+                length += @intCast(self.getNode(text_node).length());
+
+                // Move to the next node
+                node_to_process += 1;
+            }
+
+            // 4: Replace the data in the first text node
+            try self.setText(child_id, data.items);
+
+            // 7: Remove all the other text nodes in reverse order
+            var i = to_remove.items.len;
+            while (i > 0) {
+                i -= 1;
+                try self.removeChild(node_id, to_remove.items[i]);
+            }
+        }
+
+        // Move to the next child
+        current_index += 1;
+    }
+}
+test "Tree.normalize" {
+    var tree = try init(std.testing.allocator);
+    defer tree.deinit();
+    defer tree.validateTree(0, null);
+    const root = try tree.createNode();
+    const text1 = try tree.createTextNode("Hello ");
+    const text2 = try tree.createTextNode("World");
+    const child3 = try tree.createNode();
+    const text3 = try tree.createTextNode("!");
+    const text4 = try tree.createTextNode("!");
+
+    _ = try tree.appendChild(root, text1);
+    _ = try tree.appendChild(root, text2);
+    _ = try tree.appendChild(root, child3);
+    _ = try tree.appendChild(child3, text3);
+    _ = try tree.appendChild(child3, text4);
+
+    try tree.expectNodes(0, "<0><text#1>'Hello '</text#1><text#2>'World'</text#2><3><text#4>'!'</text#4><text#5>'!'</text#5></3></0>", null);
+    try tree.normalize(0);
+    try tree.expectNodes(0, "<0><text#1>'Hello World'</text#1><3><text#4>'!!'</text#4></3></0>", null);
+    tree.validateTree(0, null);
 }
 
 pub fn getNodeContains(self: *Self, parent_id: Node.NodeId, maybe_child_id: Node.NodeId) bool {
@@ -325,6 +853,7 @@ pub fn deinit(self: *Self) void {
     }
     self.node_map.deinit(self.allocator);
 
+    self.live_ranges.deinit(self.allocator);
     // Clean up style system
     self.style_manager.deinit();
     self.computed_style_cache.deinit();
@@ -424,12 +953,12 @@ fn fromXmlElement(tree: *Self, node: *xml.Element) !Node.NodeId {
         switch (child) {
             .element => |el| {
                 const child_id = try fromXmlElement(tree, el);
-                try tree.appendChild(node_id, child_id);
+                _ = try tree.appendChild(node_id, child_id);
             },
             .char_data => |text| {
                 if (!is_text_node) continue;
                 const child_id = try tree.createTextNode(text);
-                try tree.appendChild(node_id, child_id);
+                _ = try tree.appendChild(node_id, child_id);
             },
             else => {},
         }
@@ -471,32 +1000,32 @@ pub fn computeLayout(self: *Self, allocator: std.mem.Allocator, available_space:
     round_layout(0, self, 0);
 }
 
-test "createtree" {
-    var tree = try parseTree(std.testing.allocator,
-        \\<div display="flex" width="20"  flex-direction="column" justify-content="center" overflow="hidden">
-        // \\  <div display="block" width="100%" height="100%">
-        \\    <span><div display="block" width="1" height="1"></div>Lorem ipsum dolor sit am <div display="inline-block"></div>et<div display="block" width="1" height="1"></div></span>
-        // \\    <span>Lorem ipsum dolor sit am<span>et, cons</span>ec<span>tetur adipiscing elit. </span></span>
-        // \\    <span>Lorem ipsum dolor sit am<span>et, cons</span>ec<span>tetur adipiscing elit. </span></span>
-        // \\  </div>
-        \\</div>
-    );
-    defer tree.deinit();
-    // const root = tree.getNode(0);
-    const writer = std.io.getStdErr().writer().any();
-    try tree.print(writer);
+// test "createtree" {
+//     var tree = try parseTree(std.testing.allocator,
+//         \\<div display="flex" width="20"  flex-direction="column" justify-content="center" overflow="hidden">
+//         // \\  <div display="block" width="100%" height="100%">
+//         \\    <span><div display="block" width="1" height="1"></div>Lorem ipsum dolor sit am <div display="inline-block"></div>et<div display="block" width="1" height="1"></div></span>
+//         // \\    <span>Lorem ipsum dolor sit am<span>et, cons</span>ec<span>tetur adipiscing elit. </span></span>
+//         // \\    <span>Lorem ipsum dolor sit am<span>et, cons</span>ec<span>tetur adipiscing elit. </span></span>
+//         // \\  </div>
+//         \\</div>
+//     );
+//     defer tree.deinit();
+//     // const root = tree.getNode(0);
+//     const writer = std.io.getStdErr().writer().any();
+//     try tree.print(writer);
 
-    const testing_allocator = std.testing.allocator;
+//     const testing_allocator = std.testing.allocator;
 
-    var arena = std.heap.ArenaAllocator.init(testing_allocator);
-    defer arena.deinit();
-    try compute_root_layout(arena.allocator(), &tree, .{ .x = .{ .definite = 100 }, .y = .{ .definite = 100 } });
+//     var arena = std.heap.ArenaAllocator.init(testing_allocator);
+//     defer arena.deinit();
+//     try compute_root_layout(arena.allocator(), &tree, .{ .x = .{ .definite = 100 }, .y = .{ .definite = 100 } });
 
-    round_layout(0, &tree, 1);
-    const layout = tree.getLayout(0);
-    std.debug.print("\n\nlayout:\n{any}\n", .{(layout)});
-    try tree.print(writer);
-}
+//     round_layout(0, &tree, 1);
+//     const layout = tree.getLayout(0);
+//     std.debug.print("\n\nlayout:\n{any}\n", .{(layout)});
+//     try tree.print(writer);
+// }
 
 pub fn getNodeChildren(self: *Self, node_id: Node.NodeId) []const Node.NodeId {
     switch (self.getNode(node_id).kind) {
@@ -530,14 +1059,32 @@ pub fn isNodeDescendant(self: *Self, node_id: Node.NodeId, maybe_ancestor_id: No
 pub fn isNodeAncestor(self: *Self, node_id: Node.NodeId, maybe_descendant_id: Node.NodeId) bool {
     return self.isNodeDescendant(maybe_descendant_id, node_id);
 }
-pub fn getLowestCommonAncestorAndFirstDistinctAncestor(self: *Self, a: Node.NodeId, b: Node.NodeId) struct {
+pub const LCA = struct {
     ancestor: ?Node.NodeId,
     distinct_a_child: ?Node.NodeId,
     distinct_b_child: ?Node.NodeId,
-} {
+    a: Node.NodeId,
+    b: Node.NodeId,
+    pub fn aIsAncestorOfB(self: LCA) bool {
+        return self.distinct_a_child == null and self.distinct_b_child != null;
+    }
+    pub fn bIsAncestorOfA(self: LCA) bool {
+        return self.distinct_b_child == null and self.distinct_a_child != null;
+    }
+    pub fn getOrder(self: LCA, tree: *Self) !Order {
+        if (self.ancestor == null) return error.NotInTheSameTree;
+        if (self.aIsAncestorOfB()) return .lt;
+        if (self.bIsAncestorOfA()) return .gt;
+        const a_index = tree.nodeIndex(self.a) orelse unreachable;
+        const b_index = tree.nodeIndex(self.b) orelse unreachable;
+        if (a_index < b_index) return .lt;
+        return .gt;
+    }
+};
+pub fn getLowestCommonAncestorAndFirstDistinctAncestor(self: *Self, a: Node.NodeId, b: Node.NodeId) LCA {
     // Same node check
     if (a == b)
-        return .{ .ancestor = a, .distinct_a_child = null, .distinct_b_child = null };
+        return .{ .a = a, .b = b, .ancestor = a, .distinct_a_child = null, .distinct_b_child = null };
 
     // Find depths
     var depth_a: usize = 0;
@@ -562,7 +1109,7 @@ pub fn getLowestCommonAncestorAndFirstDistinctAncestor(self: *Self, a: Node.Node
     // Move up from deeper node to equalize depths
     for (0..difference) |_| {
         distinctAncestorA = x;
-        x = self.getNode(x).parent orelse return .{ .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
+        x = self.getNode(x).parent orelse return .{ .a = a, .b = b, .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
     }
 
     // Track child on shallower node's path
@@ -572,8 +1119,8 @@ pub fn getLowestCommonAncestorAndFirstDistinctAncestor(self: *Self, a: Node.Node
     while (x != y) {
         distinctAncestorA = x;
         distinctAncestorB = y;
-        x = self.getNode(x).parent orelse return .{ .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
-        y = self.getNode(y).parent orelse return .{ .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
+        x = self.getNode(x).parent orelse return .{ .a = a, .b = b, .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
+        y = self.getNode(y).parent orelse return .{ .a = a, .b = b, .ancestor = null, .distinct_a_child = null, .distinct_b_child = null };
     }
 
     // Swap back to ensure children match original a and b
@@ -581,7 +1128,34 @@ pub fn getLowestCommonAncestorAndFirstDistinctAncestor(self: *Self, a: Node.Node
         std.mem.swap(?Node.NodeId, &distinctAncestorA, &distinctAncestorB);
     }
 
-    return .{ .ancestor = x, .distinct_a_child = distinctAncestorA, .distinct_b_child = distinctAncestorB };
+    return .{ .a = a, .b = b, .ancestor = x, .distinct_a_child = distinctAncestorA, .distinct_b_child = distinctAncestorB };
+}
+test "getLowestCommonAncestorAndFirstDistinctAncestor" {
+    var tree = try init(std.testing.allocator);
+    defer tree.deinit();
+    defer tree.validateTree(0, null);
+    const root = try tree.createNode();
+    const child_a = try tree.createNode();
+    const child_b = try tree.createNode();
+    _ = try tree.appendChild(root, child_a);
+    _ = try tree.appendChild(root, child_b);
+    {
+        const lca = tree.getLowestCommonAncestorAndFirstDistinctAncestor(child_a, child_b);
+        try std.testing.expectEqual(lca.ancestor, root);
+        try std.testing.expectEqual(lca.distinct_a_child, child_a);
+        try std.testing.expectEqual(lca.distinct_b_child, child_b);
+    }
+
+    {
+        const lca = tree.getLowestCommonAncestorAndFirstDistinctAncestor(child_a, root);
+        try std.testing.expectEqual(lca.ancestor, root);
+        try std.testing.expectEqual(lca.bIsAncestorOfA(), true);
+    }
+    {
+        const lca = tree.getLowestCommonAncestorAndFirstDistinctAncestor(root, child_a);
+        try std.testing.expectEqual(lca.ancestor, root);
+        try std.testing.expectEqual(lca.aIsAncestorOfB(), true);
+    }
 }
 
 /// An object A is called a sibling of an object B, if and only if B and A share the same non-null parent.
@@ -594,41 +1168,22 @@ pub fn isNodeSibling(self: *Self, node_id: Node.NodeId, maybe_sibling_id: Node.N
 }
 
 pub fn firstChild(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
-    const node = self.getNode(node_id);
-    if (node.children.items.len == 0) return null;
-    return node.children.items[0];
+    return traversal.firstChild(self, node_id);
 }
 
 pub fn lastChild(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
-    const node = self.getNode(node_id);
-    if (node.children.items.len == 0) return null;
-    return node.children.items[node.children.items.len - 1];
+    return traversal.lastChild(self, node_id);
 }
 
-pub fn nodeIndex(self: *Self, node_id: Node.NodeId) ?usize {
-    const node = self.getNode(node_id);
-    const parent = node.parent orelse return null;
-    const siblings = self.getNodeChildren(parent);
-    return std.mem.indexOfScalar(Node.NodeId, siblings, node_id);
+pub fn nodeIndex(self: *Self, node_id: Node.NodeId) ?u32 {
+    return traversal.nodeIndex(self, node_id);
 }
 
 pub fn nextSibling(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
-    const node = self.getNode(node_id);
-    const parent = node.parent orelse return null;
-    const siblings = self.getNodeChildren(parent);
-
-    const index = std.mem.indexOfScalar(Node.NodeId, siblings, node_id) orelse return null;
-    if (index == siblings.len - 1) return null;
-    return siblings[index + 1];
+    return traversal.nextSibling(self, node_id);
 }
 pub fn previousSibling(self: *Self, node_id: Node.NodeId) ?Node.NodeId {
-    const node = self.getNode(node_id);
-    const parent = node.parent orelse return null;
-    const siblings = self.getNodeChildren(parent);
-
-    const index = self.nodeIndex(node_id) orelse return null;
-    if (index == 0) return null;
-    return siblings[index - 1];
+    return traversal.previousSibling(self, node_id);
 }
 pub fn isSubsequentSibling(self: *Self, node_a: Node.NodeId, node_b: Node.NodeId) bool {
     if (node_a == node_b) return false;
@@ -649,16 +1204,20 @@ pub fn treeOrder(self: *Self, node_a: Node.NodeId, node_b: Node.NodeId) !Order {
     if (node_a == node_b) return .eq;
     const lca = self.getLowestCommonAncestorAndFirstDistinctAncestor(node_a, node_b);
     if (lca.ancestor == null) return error.NotInTheSameTree;
+    // if no distinct child a, that means that a is an ancestor of b, therefore a is before b
     const distinct_a_child = lca.distinct_a_child orelse return .lt;
+    // if no distinct child b, that means that b is an ancestor of a, therefore b is before a
     const distinct_b_child = lca.distinct_b_child orelse return .gt;
-    if (self.isSubsequentSibling(distinct_a_child, distinct_b_child)) return .lt;
+    const a_index = self.nodeIndex(distinct_a_child) orelse unreachable;
+    const b_index = self.nodeIndex(distinct_b_child) orelse unreachable;
+    if (a_index < b_index) return .lt;
     return .gt;
 }
 
 test "treeOrder - comprehensive" {
     var tree = try init(std.testing.allocator);
     defer tree.deinit();
-
+    defer tree.validateTree(0, null);
     // Create a more complex tree structure
     //                    root
     //                   /    \
@@ -671,32 +1230,32 @@ test "treeOrder - comprehensive" {
     const root = try tree.createNode();
     const child_a = try tree.createNode();
     const child_b = try tree.createNode();
-    try tree.appendChild(root, child_a);
-    try tree.appendChild(root, child_b);
+    _ = try tree.appendChild(root, child_a);
+    _ = try tree.appendChild(root, child_b);
 
     const child_a_a = try tree.createNode();
     const child_a_b = try tree.createNode();
     const child_a_c = try tree.createNode();
-    try tree.appendChild(child_a, child_a_a);
-    try tree.appendChild(child_a, child_a_b);
-    try tree.appendChild(child_a, child_a_c);
+    _ = try tree.appendChild(child_a, child_a_a);
+    _ = try tree.appendChild(child_a, child_a_b);
+    _ = try tree.appendChild(child_a, child_a_c);
 
     const child_b_a = try tree.createNode();
     const child_b_b = try tree.createNode();
-    try tree.appendChild(child_b, child_b_a);
-    try tree.appendChild(child_b, child_b_b);
+    _ = try tree.appendChild(child_b, child_b_a);
+    _ = try tree.appendChild(child_b, child_b_b);
 
     const child_a_b_a = try tree.createNode();
-    try tree.appendChild(child_a_b, child_a_b_a);
+    _ = try tree.appendChild(child_a_b, child_a_b_a);
 
     // Let's add some deeper nodes for more complex testing
     const child_b_b_a = try tree.createNode();
-    try tree.appendChild(child_b_b, child_b_b_a);
+    _ = try tree.appendChild(child_b_b, child_b_b_a);
 
     const child_a_c_a = try tree.createNode();
     const child_a_c_b = try tree.createNode();
-    try tree.appendChild(child_a_c, child_a_c_a);
-    try tree.appendChild(child_a_c, child_a_c_b);
+    _ = try tree.appendChild(child_a_c, child_a_c_a);
+    _ = try tree.appendChild(child_a_c, child_a_c_b);
 
     // 1. Self comparison
     try std.testing.expectEqual(try tree.treeOrder(root, root), .eq);
@@ -755,8 +1314,8 @@ test "treeOrder - comprehensive" {
 
     // 10. Test modified tree structure
     // Let's move a subtree and test the new relationships
-    tree.removeChild(child_a, child_a_b);
-    try tree.appendChild(child_b_a, child_a_b);
+    try tree.removeChild(child_a, child_a_b);
+    _ = try tree.appendChild(child_b_a, child_a_b);
 
     // Now child_a_b is under child_b_a
     try std.testing.expectEqual(try tree.treeOrder(child_b_a, child_a_b), .lt);
@@ -772,7 +1331,7 @@ test "treeOrder - comprehensive" {
     // Create a separate tree
     const other_root = try tree.createNode();
     const other_child = try tree.createNode();
-    try tree.appendChild(other_root, other_child);
+    _ = try tree.appendChild(other_root, other_child);
 
     // Test that comparing disconnected nodes returns an error
     try std.testing.expectError(error.NotInTheSameTree, tree.treeOrder(disconnected1, disconnected2));
@@ -791,12 +1350,13 @@ test "treeOrder - comprehensive" {
     try std.testing.expectEqual(try tree.treeOrder(child_b, root), .gt);
 
     // 13. Create a very deep tree to test performance with nodes at many different levels
+
     var deep_node = child_b_b_a;
     var deep_nodes = [_]Node.NodeId{undefined} ** 10;
 
     for (0..10) |i| {
         deep_nodes[i] = try tree.createNode();
-        try tree.appendChild(deep_node, deep_nodes[i]);
+        _ = try tree.appendChild(deep_node, deep_nodes[i]);
         deep_node = deep_nodes[i];
     }
 
@@ -808,10 +1368,211 @@ test "treeOrder - comprehensive" {
 
     // 14. Test after more complex tree modifications
     // Move a subtree to another part of the tree
-    tree.removeChild(child_b_a, child_a_b);
-    try tree.appendChild(deep_nodes[5], child_a_b);
+    try tree.removeChild(child_b_a, child_a_b);
+    _ = try tree.appendChild(deep_nodes[5], child_a_b);
 
     try std.testing.expectEqual(try tree.treeOrder(deep_nodes[4], child_a_b), .lt);
     try std.testing.expectEqual(try tree.treeOrder(child_a_b, deep_nodes[6]), .gt);
     try std.testing.expectEqual(try tree.treeOrder(child_a_b_a, deep_nodes[9]), .gt);
+}
+pub fn splitTextNode(self: *Self, text_node_id: Node.NodeId, offset: u32) !Node.NodeId {
+    // 1. Let length be node's [length](#concept-node-length).
+    const text_node = self.getNode(text_node_id);
+    if (text_node.kind != .text) return error.NotATextNode;
+    const length = text_node.length();
+
+    // 2. If offset is greater than length, then [throw](https://webidl.spec.whatwg.org/#dfn-throw) an "`[IndexSizeError](https://webidl.spec.whatwg.org/#indexsizeerror)`" `[DOMException](https://webidl.spec.whatwg.org/#idl-DOMException)`.
+    if (offset > length) return error.OffsetOutOfBounds;
+
+    // 3. Let count be length minus offset.
+    const count = length - offset;
+
+    // 4. Let new data be the result of [substringing data](#concept-cd-substring) with node node, offset offset, and count count.
+    const new_data = text_node.text.slice()[offset..];
+
+    // 5. Let new node be a new `[Text](#text)` [node](#concept-node), with the same [node document](#concept-node-document) as node. Set new node's [data](#concept-cd-data) to new data.
+    const new_node_id = try self.createTextNode(new_data);
+
+    // 6. Let parent be node's [parent](#concept-tree-parent).
+    const parent = text_node.parent;
+
+    // 7. If parent is not null:
+    if (parent) |parent_id| {
+        // Get the next sibling of the text node
+        const next_sibling = self.nextSibling(text_node_id);
+
+        // 7.1. [Insert](#concept-node-insert) new node into parent before node's [next sibling](#concept-tree-next-sibling).
+        _ = try self.insertBefore(new_node_id, parent_id, next_sibling);
+
+        // Live range adjustments
+        for (self.live_ranges.items) |*range| {
+            // 7.2. For each [live range](#concept-live-range) whose [start node](#concept-range-start-node) is node
+            // and [start offset](#concept-range-start-offset) is greater than offset,
+            // set its [start node](#concept-range-start-node) to new node and decrease its [start offset](#concept-range-start-offset) by offset.
+            if (range.start.node_id == text_node_id and range.start.offset > offset) {
+                try range.setStart(self, new_node_id, range.start.offset - offset);
+            }
+
+            // 7.3. For each [live range](#concept-live-range) whose [end node](#concept-range-end-node) is node
+            // and [end offset](#concept-range-end-offset) is greater than offset,
+            // set its [end node](#concept-range-end-node) to new node and decrease its [end offset](#concept-range-end-offset) by offset.
+            if (range.end.node_id == text_node_id and range.end.offset > offset) {
+                try range.setEnd(self, new_node_id, range.end.offset - offset);
+            }
+
+            // 7.4. For each [live range](#concept-live-range) whose [start node](#concept-range-start-node) is parent and
+            // [start offset](#concept-range-start-offset) is equal to the [index](#concept-tree-index) of node plus 1,
+            // increase its [start offset](#concept-range-start-offset) by 1.
+            const index = self.nodeIndex(text_node_id) orelse unreachable;
+            if (range.start.node_id == parent_id and range.start.offset == index + 1) {
+                try range.setStart(self, parent_id, range.start.offset + 1);
+            }
+
+            // 7.5. For each [live range](#concept-live-range) whose [end node](#concept-range-end-node) is parent and
+            // [end offset](#concept-range-end-offset) is equal to the [index](#concept-tree-index) of node plus 1,
+            // increase its [end offset](#concept-range-end-offset) by 1.
+            if (range.end.node_id == parent_id and range.end.offset == index + 1) {
+                try range.setEnd(self, parent_id, range.end.offset + 1);
+            }
+        }
+    }
+
+    // 8. [Replace data](#concept-cd-replace) with node node, offset offset, count count, and data the empty string.
+    try text_node.replaceData(self, offset, @intCast(count), "");
+
+    // 9. Return new node.
+    return new_node_id;
+}
+const DumpNodesOptions = struct {
+    collapsed_caret: []const u8 = "\x1b[31m|\x1b[0m",
+    range_open: []const u8 = "\x1b[7m",
+    range_close: []const u8 = "\x1b[0m",
+};
+pub fn dumpNodes(tree: *Self, node_id: Node.NodeId, writer: std.io.AnyWriter, maybe_range: ?Range, comptime options: DumpNodesOptions) !void {
+    const node = tree.getNode(node_id);
+    if (maybe_range) |range| {
+        const is_collapsed = range.isCollapsed();
+        const range_open = options.range_open;
+        const range_close = options.range_close;
+        const collapsed_caret = options.collapsed_caret;
+
+        switch (node.kind) {
+            .text => {
+                try writer.print("<text#{d}>", .{node_id});
+                const bytes = tree.getText(node_id).bytes.items;
+
+                if (is_collapsed and node_id == range.start.node_id) {
+                    // For collapsed ranges in text nodes, insert caret at the offset
+                    // if (self.start.offset == 0) {
+                    //     try writer.print("\x1b[31m|\x1b[0m{s}", .{bytes}); // Red caret at beginning
+                    // } else if (self.start.offset >= bytes.len) {
+                    //     try writer.print("{s}\x1b[31m|\x1b[0m", .{bytes}); // Red caret at end
+                    // } else {
+                    // Caret in the middle of text
+                    try writer.print("'{s}" ++ collapsed_caret ++ "{s}'", .{ bytes[0..range.start.offset], bytes[range.start.offset..] });
+                    // }
+                } else if (!is_collapsed and node_id == range.start.node_id and range.end.node_id == node_id) {
+                    try writer.print("'{s}", .{bytes[0..range.start.offset]});
+                    try writer.print(range_open ++ "{s}" ++ range_close, .{bytes[range.start.offset..range.end.offset]});
+                    try writer.print("{s}'", .{bytes[range.end.offset..]});
+                } else if (!is_collapsed and node_id == range.start.node_id) {
+                    try writer.print("'{s}" ++ range_open ++ "{s}'", .{ bytes[0..range.start.offset], bytes[range.start.offset..bytes.len] });
+                } else if (!is_collapsed and node_id == range.end.node_id) {
+                    try writer.print("'{s}" ++ range_close ++ "{s}'", .{ bytes[0..range.end.offset], bytes[range.end.offset..] });
+                } else {
+                    try writer.print("'{s}'", .{bytes});
+                }
+                try writer.print("</text#{d}>", .{node_id});
+            },
+            else => {
+                if (is_collapsed and node_id == range.start.node_id) {
+                    // For collapsed ranges in element nodes
+                    try writer.print("<{d}>", .{node_id});
+
+                    if (node.children.items.len > 0) {
+                        var caret_shown = false;
+
+                        // Insert caret at the appropriate offset between children
+                        for (node.children.items, 0..) |child_id, i| {
+                            if (i == range.start.offset and !caret_shown) {
+                                try writer.print(collapsed_caret, .{}); // Red caret
+                                caret_shown = true;
+                            }
+
+                            try dumpNodes(tree, child_id, writer, range, options);
+                        }
+
+                        // Handle case where caret is after all children
+                        if (range.start.offset >= node.children.items.len) {
+                            try writer.print(collapsed_caret, .{});
+                        }
+                    } else if (range.start.offset == 0) {
+                        // Empty node with caret
+                        try writer.print(collapsed_caret, .{});
+                    }
+
+                    try writer.print("</{d}>", .{node_id});
+                } else if (!is_collapsed and node_id == range.start.node_id and range.start.offset == 0) {
+                    try writer.writeAll(range_open);
+                    if (node.children.items.len > 0) {
+                        try writer.print("<{d}>", .{node_id});
+                        for (node.children.items, 0..) |child_id, i| {
+                            if (!is_collapsed and i > 0 and node_id == range.start.node_id and i == range.start.offset) {
+                                try writer.writeAll(range_open);
+                            }
+                            try dumpNodes(tree, child_id, writer, range, options);
+                            if (!is_collapsed and i < node.children.items.len - 1 and node_id == range.end.node_id and i == range.end.offset) {
+                                try writer.writeAll(range_close);
+                            }
+                        }
+                        try writer.print("</{d}>", .{node_id});
+                    } else {
+                        try writer.print("<{d}/>", .{node_id});
+                    }
+                    if (!is_collapsed and node_id == range.end.node_id and range.end.offset >= node.length() - 1) {
+                        try writer.writeAll(range_close);
+                    }
+                } else {
+                    if (node.children.items.len > 0) {
+                        try writer.print("<{d}>", .{node_id});
+                        for (node.children.items, 0..) |child_id, i| {
+                            if (!is_collapsed and i > 0 and node_id == range.start.node_id and i == range.start.offset) {
+                                try writer.writeAll(range_open);
+                            }
+                            try dumpNodes(tree, child_id, writer, range, options);
+                            if (!is_collapsed and i < node.children.items.len - 1 and node_id == range.end.node_id and i == range.end.offset) {
+                                try writer.writeAll(range_close);
+                            }
+                        }
+                        try writer.print("</{d}>", .{node_id});
+                    } else {
+                        try writer.print("<{d}/>", .{node_id});
+                    }
+                    if (!is_collapsed and node_id == range.end.node_id and range.end.offset >= node.length() - 1) {
+                        try writer.writeAll(range_close);
+                    }
+                }
+            },
+        }
+    } else {
+        switch (node.kind) {
+            .text => {
+                try writer.print("<text#{d}>'{s}'</text#{d}>", .{ node_id, node.text.slice(), node_id });
+            },
+            else => {
+                try writer.print("<{d}>", .{node_id});
+                for (node.children.items) |child_id| {
+                    try dumpNodes(tree, child_id, writer, null, options);
+                }
+                try writer.print("</{d}>", .{node_id});
+            },
+        }
+    }
+}
+
+pub fn expectNodes(tree: *Self, node_id: Node.NodeId, expected: []const u8, range: ?Range) !void {
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    defer buffer.deinit();
+    try tree.dumpNodes(node_id, buffer.writer().any(), range, .{});
+    try std.testing.expectEqualStrings(expected, buffer.items);
 }

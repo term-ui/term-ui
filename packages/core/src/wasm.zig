@@ -195,19 +195,19 @@ export fn Tree_getNodeKind(tree: *Tree, node: u32) u32 {
 }
 export fn Tree_destroyNode(tree: *Tree, node: u32) void {
     logger.info("Tree_destroyNode({*}, {d})", .{ tree, node });
-    tree.destroyNode(node);
+    wasm_try(void, tree.destroyNode(node));
 }
 export fn Tree_destroyNodeRecursive(tree: *Tree, node: u32) void {
     logger.info("Tree_destroyNodeRecursive({*}, {d})", .{ tree, node });
-    tree.destroyNodeRecursive(node);
+    wasm_try(void, tree.destroyNodeRecursive(node));
 }
-export fn Tree_appendChild(tree: *Tree, parent: u32, child: u32) void {
+export fn Tree_appendChild(tree: *Tree, parent: u32, child: u32) u32 {
     logger.info("Tree_appendChild({*}, {d}, {d})", .{ tree, parent, child });
-    wasm_try(void, tree.appendChild(parent, child));
+    return @intCast(wasm_try(Tree.Node.NodeId, tree.appendChild(parent, child)));
 }
-export fn Tree_insertBefore(tree: *Tree, parent: u32, child: u32, before: u32) void {
-    logger.info("Tree_insertBefore({*}, {d}, {d}, {d})", .{ tree, parent, child, before });
-    wasm_try(void, tree.insertBefore(parent, child, before));
+export fn Tree_insertBefore(tree: *Tree, child: u32, before: u32) u32 {
+    logger.info("Tree_insertBefore({*}, {d}, {d})", .{ tree, child, before });
+    return @intCast(wasm_try(Tree.Node.NodeId, tree.insertBefore(child, before)));
 }
 export fn Tree_removeChildren(tree: *Tree, parent: u32) void {
     logger.info("Tree_removeChildren({*}, {d})", .{ tree, parent });
@@ -216,7 +216,7 @@ export fn Tree_removeChildren(tree: *Tree, parent: u32) void {
 
 export fn Tree_removeChild(tree: *Tree, parent: u32, child: u32) void {
     logger.info("Tree_removeChild({*}, {d}, {d})", .{ tree, parent, child });
-    tree.removeChild(parent, child);
+    wasm_try(void, tree.removeChild(parent, child));
 }
 export fn Tree_getChildrenCount(tree: *Tree, parent: u32) u32 {
     logger.info("Tree_getChildrenCount({*}, {d})", .{ tree, parent });
@@ -235,9 +235,9 @@ export fn Tree_getNodeParent(tree: *Tree, node: u32) i32 {
     }
     return -1;
 }
-export fn Tree_appendChildAtIndex(tree: *Tree, parent: u32, child: u32, index: u32) void {
+export fn Tree_appendChildAtIndex(tree: *Tree, parent: u32, child: u32, index: u32) u32 {
     logger.info("Tree_appendChildAtIndex({*}, {d}, {d}, {d})", .{ tree, parent, child, index });
-    wasm_try(void, tree.appendChildAtIndex(parent, child, index));
+    return @intCast(wasm_try(Tree.Node.NodeId, tree.appendChildAtIndex(parent, child, index)));
 }
 export fn Tree_getNodeCursorStyle(tree: *Tree, node: u32) u32 {
     logger.info("Tree_getNodeCursorStyle({*}, {d})", .{ tree, node });
@@ -622,4 +622,8 @@ test "leak" {
         Tree_setStyle(tree, node, allocTestString("background-color: blue;cursor: " ++ field.name ++ ";"));
         Tree_computeLayout(tree, allocTestString("200"), allocTestString("200"));
     }
+}
+
+test {
+    _ = @import("./layout/tree/Range.zig");
 }

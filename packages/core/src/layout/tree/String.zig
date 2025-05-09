@@ -3,7 +3,6 @@ const visible = @import("../../uni/string-width.zig").visible;
 
 bytes: std.ArrayListUnmanaged(u8) = .{},
 line_breaks: ?std.ArrayListUnmanaged(usize) = .{},
-_length: usize = 0,
 
 const Self = @This();
 
@@ -12,22 +11,25 @@ pub fn init() Self {
 }
 
 pub fn length(self: *Self) usize {
-    if (self._length == 0 and self.bytes.items.len > 0) {
-        self._length = std.unicode.utf8CountCodepoints(self.bytes.items) catch unreachable;
-    }
-    return self._length;
+    return self.bytes.items.len;
+}
+
+pub fn slice(self: *Self) []const u8 {
+    return self.bytes.items;
+}
+
+pub fn countCodepoints(self: *Self) usize {
+    return std.unicode.utf8CountCodepoints(self.bytes.items) catch unreachable;
 }
 pub fn iterCodepoints(self: *Self) std.unicode.Utf8Iterator {
     return std.unicode.Utf8Iterator{ .i = 0, .bytes = self.bytes.items };
 }
 pub fn append(self: *Self, allocator: std.mem.Allocator, bytes: []const u8) !void {
     try self.bytes.appendSlice(allocator, bytes);
-    self._length = 0;
 }
 
 pub fn concat(self: *Self, allocator: std.mem.Allocator, other: *Self) !void {
     try self.bytes.appendSlice(allocator, other.bytes.items);
-    self._length = 0;
 }
 
 pub fn clearRetainingCapacity(self: *Self) void {
@@ -48,6 +50,9 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     if (self.line_breaks) |*line_breaks| {
         line_breaks.deinit(allocator);
     }
+}
+pub fn replace(self: *Self, allocator: std.mem.Allocator, start: usize, count: usize, bytes: []const u8) !void {
+    try self.bytes.replaceRange(allocator, start, count, bytes);
 }
 
 pub fn measure(self: *Self) f32 {

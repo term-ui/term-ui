@@ -28,4 +28,5 @@ test {
     // _ = @import("./styles/text_formatting_tests.zig");
     _ = @import("./renderer/Renderer.zig");
     _ = @import("./renderer/gradient.zig");
+    _ = @import("./layout/Selection.zig");
 }
