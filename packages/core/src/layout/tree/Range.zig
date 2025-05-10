@@ -995,8 +995,6 @@ test "boundaryPointTreeOrder - comprehensive" {
         // nodeA is ancestor of nodeB and child index < offsetA
         const bp1 = BoundaryPoint{ .node_id = child_a, .offset = 1 };
         const bp2 = BoundaryPoint{ .node_id = text_a_a, .offset = 3 };
-        std.debug.print("bp1: {s}\n", .{bp1});
-        std.debug.print("bp2: {s}\n", .{bp2});
         try std.testing.expectEqual(try boundaryPointTreeOrder(&tree, bp1, bp2), .gt);
         try std.testing.expectEqual(try boundaryPointTreeOrder(&tree, bp2, bp1), .lt);
     }
@@ -1026,10 +1024,7 @@ test "boundaryPointTreeOrder - comprehensive" {
         // nodes in different branches where neither is ancestor of the other
         const bp1 = BoundaryPoint{ .node_id = text_a_a, .offset = 5 };
         const bp2 = BoundaryPoint{ .node_id = text_b_b, .offset = 2 };
-        std.debug.print("bp1: {s}\n", .{bp1});
-        std.debug.print("bp2: {s}\n", .{bp2});
         const ord = try boundaryPointTreeOrder(&tree, bp1, bp2);
-        std.debug.print("order: {}\n", .{ord});
 
         try std.testing.expectEqual(ord, .lt);
         try std.testing.expectEqual(try boundaryPointTreeOrder(&tree, bp1, bp2), .lt);

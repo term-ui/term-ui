@@ -115,8 +115,14 @@ pub inline fn getLayout(self: *Self, id: Node.NodeId) *Layout {
 pub inline fn getCache(self: *Self, id: Node.NodeId) *Cache {
     return &self.getNode(id).cache;
 }
-pub inline fn getComputedText(self: *Self, id: Node.NodeId) *?ComputedText {
-    return &self.getNode(id).computed_text;
+pub inline fn getComputedText(self: *Self, id: Node.NodeId) ?*ComputedText {
+    if (self.getNode(id).computed_text) |*computed_text| {
+        return computed_text;
+    }
+    return null;
+}
+pub fn unsafeGetComputedText(self: *Self, id: Node.NodeId) *ComputedText {
+    return &(self.getNode(id).computed_text orelse std.debug.panic("No computed text for node {d}\n", .{id}));
 }
 pub inline fn getTextRootId(self: *Self, id: Node.NodeId) ?Node.NodeId {
     return self.getNode(id).text_root_id;
@@ -174,7 +180,7 @@ pub fn setLayout(self: *Self, id: Node.NodeId, layout: Layout) void {
 pub fn setCache(self: *Self, id: Node.NodeId, cache: Cache) void {
     self.getNode(id).cache = cache;
 }
-pub fn setComputedText(self: *Self, id: Node.NodeId, computed_text: ComputedText) void {
+pub fn setComputedText(self: *Self, id: Node.NodeId, computed_text: ?ComputedText) void {
     if (self.getNode(id).computed_text) |*old_computed_text| {
         old_computed_text.deinit();
     }
@@ -199,7 +205,6 @@ pub inline fn createComputedText(self: *Self) !ComputedText {
 
 pub fn markDirty(self: *Self, id: Node.NodeId) void {
     const cache = self.getCache(id);
-    const computed_text = self.getComputedText(id);
     const text_root_id = self.getTextRootId(id);
     if (cache.isEmpty() and text_root_id == null) {
         return;
@@ -208,10 +213,10 @@ pub fn markDirty(self: *Self, id: Node.NodeId) void {
     // Clear layout cache
     cache.clear();
     self.setTextRootId(id, null);
-    if (computed_text.* != null) {
-        computed_text.*.?.deinit();
-        computed_text.* = null;
-    }
+    // if (self.getComputedText(id)) |computed_text| {
+
+    // }
+    self.setComputedText(id, null);
 
     // Also invalidate computed style for this specific node
     // We only invalidate this node, not descendants, since layout changes
@@ -402,8 +407,7 @@ fn insertBeforeChecked(self: *Self, node_id: Node.NodeId, parent: Node.NodeId, c
     }
 
     // 6.  Let previousSibling be child’s [previous sibling](#concept-tree-previous-sibling) or parent’s [last child](#concept-tree-last-child) if child is null.
-    const previous_sibling = if (child) |child_id| self.previousSibling(child_id) else self.lastChild(parent);
-    std.debug.print("parent: {d}, previous_sibling: {?}\n", .{ parent, previous_sibling });
+    // const previous_sibling = if (child) |child_id| self.previousSibling(child_id) else self.lastChild(parent);
 
     // 7.  For each node in nodes, in [tree order](#concept-tree-order):
     for (nodes) |node| {
@@ -608,7 +612,7 @@ pub fn replaceChild(self: *Self, new_node_id: Node.NodeId, old_child_id: Node.No
     // 13. Insert each node before the reference child
     for (nodes) |node_to_insert| {
         _ = try self.insertBefore(node_to_insert, reference_child);
-        std.debug.print("replaceChild {d} {d}\n", .{ old_child_id, new_node_id });
+        // std.debug.print("replaceChild {d} {d}\n", .{ old_child_id, new_node_id });
     }
 
     // 15. Return the removed child
@@ -847,7 +851,6 @@ pub fn deinit(self: *Self) void {
     if (self.input_manager) |*manager| {
         manager.deinit();
     }
-    // std.debug.print("deinit {d} nodes\n", .{self.node_map.count()});
     while (node_iter.next()) |entry| {
         entry.value_ptr.deinit(self.allocator);
     }
@@ -870,7 +873,7 @@ fn printNode(self: *Self, writer: std.io.AnyWriter, node_id: Node.NodeId, indent
         try writer.print("[{s} #{d}] \"{s}\"\n", .{ @tagName(kind), node_id, self.getText(node_id).bytes.items });
     } else {
         const display = self.getStyle(node_id).display;
-        const has_computed_text = self.getComputedText(node_id).* != null;
+        const has_computed_text = self.getComputedText(node_id) != null;
 
         try writer.print("[{s}#{d} {s} {s} {any} #{d} pos=[{d},{d}] size=[{d},{d}] content_size=[{d},{d}] border=[{d}, {d}, {d}, {d}]]\n", .{
             @tagName(kind),
@@ -890,6 +893,7 @@ fn printNode(self: *Self, writer: std.io.AnyWriter, node_id: Node.NodeId, indent
             layout.border.bottom,
             layout.border.left,
         });
+
         // } else {
         //     try writer.print("[{s} {s} {s}  #{d} x={d} y={d} width={d} height={d}]\n", .{
         //         @tagName(kind),
@@ -915,27 +919,96 @@ pub fn print(self: *Self, writer: std.io.AnyWriter) !void {
 pub inline fn parseTree(allocator: std.mem.Allocator, tree_string: []const u8) !Self {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
-    const a = arena.allocator();
+    const arena_allocator = arena.allocator();
 
-    const doc = try xml.parse(a, tree_string);
+    const doc = try xml.parse(arena_allocator, tree_string);
     var tree = try init(allocator);
     errdefer tree.deinit();
     _ = try fromXmlElement(&tree, doc.root);
 
     return tree;
 }
-fn fromXmlElement(tree: *Self, node: *xml.Element) !Node.NodeId {
-    const is_text_node = std.mem.eql(u8, node.tag, "text");
-
-    // var style = Style.init(tree.allocator);
-    // errdefer style.deinit();
-    const node_id = try tree.createNode();
-    var style = &tree.getNode(node_id).styles;
-    if (is_text_node) {
-        style.display = .{ .inside = .flow, .outside = .@"inline" };
+fn printFunctionErrors(comptime func: anytype) void {
+    const type_info: std.builtin.Type = @typeInfo(@TypeOf(func));
+    switch (type_info) {
+        .@"fn" => |func_info| {
+            const ReturnType = func_info.return_type orelse @compileError("No return type");
+            const ret_type_info: std.builtin.Type = @typeInfo(ReturnType);
+            switch (ret_type_info) {
+                .error_union => |error_union_info| {
+                    const error_type: std.builtin.Type = @typeInfo(error_union_info.error_set);
+                    switch (error_type) {
+                        .error_set => |error_set_info| {
+                            inline for (error_set_info.?) |field| {
+                                std.debug.print("{s}\n", .{field.name});
+                            }
+                        },
+                        else => @compileError("No error type"),
+                    }
+                },
+                else => @compileError("No error type"),
+            }
+        },
+        else => unreachable,
     }
+}
+const PrintTreeError = error{
+    OutOfMemory,
+    NotFound,
+    HierarchyRequestError,
+    NotFoundError,
+};
+inline fn textNodeFromXmlElement(
+    tree: *Self,
+    xml_node: *xml.Element,
+) PrintTreeError!Node.NodeId {
+    // const node_id = try tree.createTextNode("");
+    const node_id = try tree.createNode();
+    var node = tree.getNode(node_id);
+    node.styles.display = .{ .inside = .flow, .outside = .@"inline" };
 
-    for (node.attributes) |attr| {
+    var it = xml_node.iterator();
+    while (it.next()) |content| {
+        switch (content.*) {
+            .char_data => |text| {
+                const text_node_id = try tree.createTextNode(text);
+                _ = try tree.appendChild(node_id, text_node_id);
+                try tree.setText(text_node_id, text);
+            },
+            .element => |el| {
+                // errorFromFunction(fromXmlElement);
+                const child_id = try fromXmlElement(tree, el);
+                _ = try tree.appendChild(node_id, child_id);
+            },
+            else => {
+                std.debug.print("unknown content {s}\n", .{@tagName(content.*)});
+            },
+        }
+    }
+    return node_id;
+}
+fn fromXmlElement(
+    tree: *Self,
+    xml_node: *xml.Element,
+) PrintTreeError!Node.NodeId {
+    const is_text_node = std.mem.eql(u8, xml_node.tag, "text");
+    if (is_text_node) {
+        return textNodeFromXmlElement(
+            tree,
+            xml_node,
+        );
+    }
+    const node_id = try tree.createNode();
+
+    // // var style = Style.init(tree.allocator);
+    // // errdefer style.deinit();
+    // const node_id = try tree.createNode();
+    // var style = &tree.getNode(node_id).styles;
+    // if (is_text_node) {
+    //     style.display = .{ .inside = .flow, .outside = .@"inline" };
+    // }
+
+    for (xml_node.attributes) |attr| {
         if (std.mem.eql(u8, attr.name, "style")) {
             try s.parseStyleString(tree, node_id, attr.value);
             continue;
@@ -949,17 +1022,17 @@ fn fromXmlElement(tree: *Self, node: *xml.Element) !Node.NodeId {
             continue;
         }
     }
-    for (node.children) |child| {
+    for (xml_node.children) |child| {
         switch (child) {
             .element => |el| {
                 const child_id = try fromXmlElement(tree, el);
                 _ = try tree.appendChild(node_id, child_id);
             },
-            .char_data => |text| {
-                if (!is_text_node) continue;
-                const child_id = try tree.createTextNode(text);
-                _ = try tree.appendChild(node_id, child_id);
-            },
+            // .char_data => |text| {
+            //     if (!is_text_node) continue;
+            //     const child_id = try tree.createTextNode(text);
+            //     _ = try tree.appendChild(node_id, child_id);
+            // },
             else => {},
         }
     }

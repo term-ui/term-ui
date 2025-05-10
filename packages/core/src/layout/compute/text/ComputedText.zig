@@ -5,9 +5,9 @@ const Self = @This();
 const Rect = @import("../../rect.zig").Rect;
 const styles = @import("../../../styles/styles.zig");
 const String = @import("../../tree/String.zig");
-
-text: String = .{},
-lines: Array(Line) = .{},
+const Point = @import("../../point.zig").Point;
+data: std.ArrayListUnmanaged(u8) = .{},
+lines: Array(LineBox) = .{},
 arena: std.heap.ArenaAllocator,
 
 // Get the allocator from the arena
@@ -15,19 +15,45 @@ pub fn getAllocator(self: *Self) std.mem.Allocator {
     return self.arena.allocator();
 }
 
-const Line = struct {
+const LineBox = struct {
     parts: Array(TextPart) = .{},
-    width: f32 = 0,
-    height: f32 = 0,
+    content_width: f32 = 0,
     allocator: std.mem.Allocator,
-
-    pub fn appendPart(self: *Line, part: TextPart) !void {
-        self.height = @max(self.height, part.height + part.margin.top + part.margin.bottom);
-        self.width += part.width + part.margin.left + part.margin.right;
+    position: Point(f32) = .{ .x = 0, .y = 0 },
+    size: Point(f32) = .{ .x = 0, .y = 0 },
+    pub fn appendPart(self: *LineBox, part: TextPart) !void {
+        self.size.y = @max(self.size.y, part.size.y + part.margin.top + part.margin.bottom);
+        // std.debug.print("part.size {any} {any}\n", .{ part.size, part.position });
+        self.content_width += part.size.x + part.margin.left + part.margin.right;
         try self.parts.append(self.allocator, part);
+    }
+    pub fn alignHorizontally(self: *LineBox, alignment: styles.text_align.TextAlign, container_width: f32) void {
+        self.size.x = container_width;
+        var x = switch (alignment) {
+            // .left => {
+            //     self.x = 0;
+            // },
+            .right => container_width - self.content_width,
+            .center => (container_width - self.content_width) / 2,
+
+            else => 0,
+        };
+        const baseline = self.position.y;
+        _ = baseline; // autofix
+        for (self.parts.items) |*part| {
+            part.position.x = x;
+            x += part.size.x + part.margin.left + part.margin.right;
+            part.position.y = self.size.y - part.size.y;
+        }
     }
 };
 
+pub fn length(self: Self) usize {
+    return self.data.items.len;
+}
+// pub fn appendText(self: *Self, text: []const u8) !void {
+//     try self.data.appendSlice(self.arena.allocator(), text);
+// }
 pub fn init(allocator: std.mem.Allocator) !Self {
     return .{
         .arena = std.heap.ArenaAllocator.init(allocator),
@@ -37,19 +63,17 @@ pub fn init(allocator: std.mem.Allocator) !Self {
 pub fn deinit(self: Self) void {
     self.arena.deinit();
 }
-pub fn createLine(self: *Self) Line {
+pub fn createLine(self: *Self) LineBox {
     return .{
-        .width = 0,
-        .height = 0,
         .allocator = self.arena.allocator(),
     };
 }
-pub fn pushLine(self: *Self, line: Line) !void {
+pub fn pushLine(self: *Self, line: LineBox) !void {
     try self.lines.append(self.arena.allocator(), line);
 }
 
-pub fn appendLine(self: *Self, width: f32, height: f32) !*Line {
-    try self.lines.append(self.arena.allocator(), Line{
+pub fn appendLine(self: *Self, width: f32, height: f32) !*LineBox {
+    try self.lines.append(self.arena.allocator(), LineBox{
         .width = width,
         .height = height,
         .allocator = self.arena.allocator(),
@@ -83,7 +107,10 @@ pub fn appendPart(self: *Self, part: TextPart) !void {
 }
 
 pub fn appendText(self: *Self, text: []const u8) !void {
-    try self.text.appendSlice(self.arena.allocator(), text);
+    try self.data.appendSlice(self.arena.allocator(), text);
+}
+pub fn slice(self: Self, start: usize, end: usize) []const u8 {
+    return self.data.items[start..end];
 }
 
 pub const TextPart = struct {
@@ -91,10 +118,11 @@ pub const TextPart = struct {
     break_type: Segment.BreakType,
     start: usize,
     length: usize,
-    width: f32,
-    height: f32,
     display: styles.display.Display,
     margin: Rect(f32) = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
+    position: Point(f32) = .{ .x = 0, .y = 0 },
+    size: Point(f32) = .{ .x = 0, .y = 0 },
+
     pub fn isInlineText(self: TextPart) bool {
         return self.display.outside == .@"inline" and self.display.inside == .flow;
     }

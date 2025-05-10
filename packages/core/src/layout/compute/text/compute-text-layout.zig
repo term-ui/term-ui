@@ -5,7 +5,7 @@ const Point = @import("../../point.zig").Point;
 const LayoutOutput = @import("../compute_constants.zig").LayoutOutput;
 const AvailableSpace = @import("../compute_constants.zig").AvailableSpace;
 const SizingMode = @import("../compute_constants.zig").SizingMode;
-const Line = @import("../../line.zig").Line;
+const LineBox = @import("../../line.zig").LineBox;
 
 const Tree = @import("../../tree/Tree.zig");
 const LayoutInput = @import("../compute_constants.zig").LayoutInput;
@@ -153,8 +153,7 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
     // This object is owned by the tree and will be deallocated when the tree is destroyed.
     // Any allocations made by ComputedText methods are intentionally persistent
     // and will show as "leaks" in memory leak detection tools during tests.
-    var computed_text = try tree.createComputedText();
-    defer tree.setComputedText(node_id, computed_text);
+    tree.setComputedText(node_id, try tree.createComputedText());
     const root_style = tree.getComputedStyle(node_id);
 
     // Use the allocator for temporary calculations
@@ -164,16 +163,16 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
     var final_parts = Array(TextPart).init(allocator);
     defer final_parts.deinit();
 
-    try collectText(allocator, &computed_text, &parts, node_id, node_id, tree, inputs);
+    try collectText(allocator, &parts, node_id, node_id, tree, inputs);
 
-    var linebreak_iter = LineBreak.initAssumeValid(computed_text.text.bytes.items);
+    var linebreak_iter = LineBreak.initAssumeValid(tree.unsafeGetComputedText(node_id).data.items);
     var segments = std.ArrayList(Segment).init(allocator);
     defer segments.deinit();
     var i: usize = 0;
     while (linebreak_iter.next()) |linebreak| {
         try segments.append(.{
             .index = i,
-            .text = computed_text.text.bytes.items[i..linebreak.i],
+            .text = tree.unsafeGetComputedText(node_id).slice(i, linebreak.i),
             .break_type = switch (linebreak.mandatory) {
                 true => .mandatory,
                 false => .allowed,
@@ -239,7 +238,7 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
             if (intersection_end > intersection_start) {
                 const node_kind = tree.getNodeKind(part.node_id);
                 assert(node_kind == .text);
-                const slice = std.mem.trimRight(u8, computed_text.text.bytes.items[intersection_start..intersection_end], "\n\r");
+                const slice = std.mem.trimRight(u8, tree.unsafeGetComputedText(node_id).slice(intersection_start, intersection_end), "\n\r");
                 var break_type = segment.break_type;
                 if (slice.len < intersection_end - intersection_start) {
                     break_type = .mandatory;
@@ -249,8 +248,7 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
                     .node_id = part.node_id,
                     .start = intersection_start,
                     .length = slice.len,
-                    .width = measure(slice),
-                    .height = part.height,
+                    .size = .{ .x = measure(slice), .y = part.size.y },
                     .display = part.display,
                     .break_type = if (intersection_end == segment_end)
                         break_type
@@ -282,7 +280,7 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
                 var word_width: f32 = 0;
                 var max_word_width: f32 = 0;
                 for (final_parts.items) |part| {
-                    word_width += part.width;
+                    word_width += part.size.x;
                     max_word_width = @max(max_word_width, word_width);
                     if (part.break_type != .not_allowed) word_width = 0;
                 }
@@ -291,87 +289,94 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
         };
     };
 
-    var current_line = computed_text.createLine();
+    var current_line = tree.unsafeGetComputedText(node_id).createLine();
+    var y: f32 = 0;
     var height: f32 = 0;
     var width: f32 = 0;
     var prev_break: Segment.BreakType = .not_allowed;
     for (final_parts.items) |part| {
-        const new_width = current_line.width + part.width + part.margin.left + part.margin.right;
+        const new_width = current_line.content_width + part.size.x + part.margin.left + part.margin.right;
 
         if (prev_break == .mandatory or new_width > max_width) {
             // for (current_line.parts.items) |p| std.debug.print("{s}", .{computed_text.text.items[p.start .. p.start + p.length]});
 
-            try computed_text.pushLine(current_line);
-            height += current_line.height;
-            width = @max(width, current_line.width);
+            // current_line.alignHorizontally(root_style.text_align, width);
 
-            current_line = computed_text.createLine();
+            height += current_line.size.y;
+            width = @max(width, current_line.size.x);
+            if (current_line.parts.items.len > 0) {
+                const slice = tree.unsafeGetComputedText(node_id).slice(current_line.parts.items[current_line.parts.items.len - 1].start, current_line.parts.items[current_line.parts.items.len - 1].start + current_line.parts.items[current_line.parts.items.len - 1].length);
+                const trimmed = std.mem.trimRight(u8, slice, "\n\r ");
+                const last = &current_line.parts.items[current_line.parts.items.len - 1];
+                const diff: f32 = @floatFromInt(slice.len - trimmed.len);
+                last.size.x -= diff;
+                current_line.content_width -= diff;
+            }
+
+            current_line.position.y = y;
+            current_line.position.y = y;
+            try tree.unsafeGetComputedText(node_id).pushLine(current_line);
+            y += current_line.size.y;
+            current_line = tree.unsafeGetComputedText(node_id).createLine();
+            current_line.position.y = y;
         }
         try current_line.appendPart(part);
         prev_break = part.break_type;
     }
-    // for (final_parts.items) |part| {
-    //     std.debug.print("'{s}' {s}\n", .{ computed_text.text.items[part.start .. part.start + part.length], @tagName(part.break_type) });
-    // }
-
     if (current_line.parts.items.len > 0) {
-        try computed_text.pushLine(current_line);
-        height += current_line.height;
-        width = @max(width, current_line.width);
-    }
-    // std.debug.print("width: {d} height: {d}\n", .{ width, height });
-    // for (computed_text.lines.items) |line| {
-    //     std.debug.print("[line]: width: {d} height: {d} ", .{ line.width, line.height });
-    //     for (line.parts.items) |part| {
-    //         if (part.isInlineText()) {
-    //             std.debug.print("{s}", .{computed_text.text.items[part.start .. part.start + part.length]});
-    //         } else {
-    //             std.debug.print("[{d}]", .{part.node_id});
-    //         }
-    //     }
-    //     std.debug.print("\n", .{});
-    // }
+        const slice = tree.unsafeGetComputedText(node_id).slice(current_line.parts.items[current_line.parts.items.len - 1].start, current_line.parts.items[current_line.parts.items.len - 1].start + current_line.parts.items[current_line.parts.items.len - 1].length);
+        const trimmed = std.mem.trimRight(u8, slice, "\n\r ");
+        const last = &current_line.parts.items[current_line.parts.items.len - 1];
+        const diff: f32 = @floatFromInt(slice.len - trimmed.len);
+        last.size.x -= diff;
+        current_line.content_width -= diff;
 
-    // Return layout with proper width and height
-    // width = switch (available_space.x) {
-    //     .definite => |container_width| @max(container_width, width),
-    //     else => width,
-    // };
-    // std.debug.print("width: {d} height: {d} available_width: {}\n", .{ width, height, available_space.x });
+        current_line.position.y = y;
+        try tree.unsafeGetComputedText(node_id).pushLine(current_line);
+        height += current_line.size.y;
+        width = @max(width, current_line.size.x);
+    }
+    const container_width = switch (available_space.x) {
+        .definite => |w| w,
+
+        else => width,
+    };
+    for (tree.unsafeGetComputedText(node_id).lines.items) |*line| {
+        line.position.x = padding_border.left;
+        line.alignHorizontally(root_style.text_align, container_width);
+    }
     return LayoutOutput{
         .size = .{
-            .x = width,
+            .x = container_width,
             .y = height,
         },
         .content_size = .{
-            .x = width,
+            .x = @max(width, container_width),
             .y = height,
         },
     };
 }
 
-fn collectText(allocator: std.mem.Allocator, computed_text: *ComputedText, parts_array: *Array(TextPart), node_id: Node.NodeId, root_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !void {
+fn collectText(allocator: std.mem.Allocator, parts_array: *Array(TextPart), node_id: Node.NodeId, root_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !void {
     tree.setTextRootId(node_id, root_id);
     const display = tree.getComputedStyle(node_id).display;
 
     var part = TextPart{
         .node_id = node_id,
-        .start = computed_text.text.length(),
+        .start = tree.unsafeGetComputedText(root_id).length(),
         .length = 0,
         .break_type = .not_allowed,
         .display = display,
-        .width = 0,
-        .height = 0,
     };
     const node_kind = tree.getNodeKind(node_id);
     // if text node or if this is root (parts_array is empty)
     if (node_kind == .text) {
-        const start = computed_text.text.length();
-        try computed_text.text.concat(allocator, tree.getText(node_id));
+        const start = tree.unsafeGetComputedText(root_id).length();
+        try tree.unsafeGetComputedText(root_id).appendText(tree.getText(node_id).slice());
         part.start = start;
         part.length = tree.getText(node_id).length();
-        part.width = tree.getText(node_id).measure();
-        part.height = 1.0;
+        part.size.x = tree.getText(node_id).measure();
+        part.size.y = 1.0;
 
         try parts_array.append(part);
 
@@ -379,7 +384,7 @@ fn collectText(allocator: std.mem.Allocator, computed_text: *ComputedText, parts
     }
     if (display.isInlineFlow()) {
         for (tree.getChildren(node_id).items) |child| {
-            try collectText(allocator, computed_text, parts_array, child, root_id, tree, inputs);
+            try collectText(allocator, parts_array, child, root_id, tree, inputs);
         }
         return;
     }
@@ -395,8 +400,9 @@ fn collectText(allocator: std.mem.Allocator, computed_text: *ComputedText, parts
             .inherent_size,
             .{ .end = false, .start = false },
         );
-        part.width = measured.size.x;
+        part.size.x = measured.size.x;
         const style = tree.getComputedStyle(node_id);
+
         part.margin = style.margin.maybeResolve(inputs.parent_size.x).orZero();
         if (part.display.outside == .@"inline") {
             part.margin.top = @max(part.margin.top, 0);
@@ -406,41 +412,15 @@ fn collectText(allocator: std.mem.Allocator, computed_text: *ComputedText, parts
         const layout = tree.getUnroundedLayout(node_id);
         layout.size = measured.size;
         layout.content_size = measured.size;
+
         // layout.size.x = measured.size.x;
         // layout.size.y = measured.size.y;
         // layout.content_size.x = measured.size.x;
         // layout.content_size.y = measured.size.y;
 
         // For block elements, use the measured height and ensure it's rounded up
-        part.height = @ceil(measured.size.y);
+        part.size.y = @ceil(measured.size.y);
         // std.debug.print("part {s} width={d} height={d}\n", .{ @tagName(part.display.outside), part.width, part.height });
         try parts_array.append(part);
-        // try parts_array.append(.{
-        //     .node_id = node_id,
-        //     .start = text_array.items.len,
-        //     .length = 0,
-        //     .break_type = .NotAllowed,
-        //     .width = measured.size.x,
-        //     .height = measured.size.y,
-        //     .display = display,
-        // });
-        // return;
     }
-}
-test "SegmentIter" {
-    // var root = try block(testing_allocator, .{}, .{
-    //     // "abc ", "", "def",
-    //     "Hello     ",
-    //     try span(testing_allocator, .{}, .{"World"}),
-    //     // try inlineBlock(testing_allocator, .{}, .{
-    //     //     " and universe",
-    //     // }),
-    //     "",
-    //
-    //     "!",
-    //     try span(testing_allocator, .{}, .{
-    //         " and universe",
-    //         try span(testing_allocator, .{}, .{"!��"}),
-    //     }),
-    // });
 }

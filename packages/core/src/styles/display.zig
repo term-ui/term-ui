@@ -47,6 +47,9 @@ pub const Display = struct {
     pub fn isInlineFlow(self: Display) bool {
         return self.outside == .@"inline" and self.inside == .flow;
     }
+    pub fn isFlowRoot(self: Display) bool {
+        return self.outside == .@"inline" and self.inside == .flow_root;
+    }
 };
 
 // syntax: [ <display-outside> || <display-inside> ] | <display-outside> | inline-block | flex

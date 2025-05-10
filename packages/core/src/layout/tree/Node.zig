@@ -118,5 +118,6 @@ pub fn updateRangesAfterReplace(self: *Self, tree: *Tree, offset: u32, count: u3
 }
 
 pub fn setText(self: *Self, tree: *Tree, text: []const u8) !void {
-    try self.text.replace(tree.allocator, 0, self.text.length(), text);
+    self.text.clearRetainingCapacity();
+    try self.text.append(tree.allocator, text);
 }
