@@ -357,7 +357,7 @@ export fn Tree_computeLayout(tree: *Tree, width: [*:0]u8, height: [*:0]u8) void 
 }
 export fn Renderer_renderToStdout(renderer: *Renderer, tree: *Tree, clear_screen: bool) void {
     logger.info("Renderer_renderToStdout({*}, {*}, {any})", .{ renderer, tree, clear_screen });
-    wasm_try(void, renderer.render(tree, std.io.getStdOut().writer().any(), clear_screen));
+    wasm_try(void, renderer.render(wasm_allocator, tree, std.io.getStdOut().writer().any(), clear_screen));
 }
 export fn Renderer_init() *Renderer {
     logger.info("Renderer_init()", .{});
@@ -375,7 +375,7 @@ export fn Renderer_getNodeAt(renderer: *Renderer, x: f32, y: f32) u32 {
     return @intCast(renderer.getNodeAt(.{
         .x = x,
         .y = y,
-    }));
+    }) orelse std.math.maxInt(u32));
 }
 export const EventBuffer = [_]u8{1} ** 128;
 
@@ -626,4 +626,5 @@ test "leak" {
 
 test {
     _ = @import("./layout/tree/Range.zig");
+    _ = @import("./uni/GraphemeBreak.zig");
 }

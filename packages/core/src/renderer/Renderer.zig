@@ -10,7 +10,10 @@ const NodeId = @import("../layout/tree/Node.zig").NodeId;
 const Style = @import("../layout/tree/Style.zig");
 const ComputedText = @import("../layout/compute/text/ComputedText.zig");
 const debug = @import("../debug.zig");
+const Selection = @import("../layout/tree/Selection.zig");
 const logger = std.log.scoped(.renderer);
+const NodeIterator = @import("../layout/tree/NodeIterator.zig");
+const BoundaryPoint = @import("../layout/tree/Range.zig").BoundaryPoint;
 
 canvas: Canvas,
 node_map: std.ArrayList(NodeId),
@@ -66,17 +69,17 @@ pub fn drawNodeArea(self: *Self, node_id: NodeId, rect: Canvas.Rect) void {
     }
 }
 
-pub fn getNodeAt(self: *Self, position: Point(f32)) NodeId {
+pub fn getNodeAt(self: *Self, position: Point(f32)) ?NodeId {
     const x: u32 = @intFromFloat(@round(position.x));
     const y: u32 = @intFromFloat(@round(position.y));
     const index = y * self.size.x + x;
     if (index >= self.node_map.items.len) {
-        return 0;
+        return null;
     }
     return self.node_map.items[index];
 }
 
-pub fn render(self: *Self, tree: *Tree, writer: std.io.AnyWriter, clear_screen: bool) !void {
+pub fn render(self: *Self, allocator: std.mem.Allocator, tree: *Tree, writer: std.io.AnyWriter, clear_screen: bool) !void {
     const layout = tree.getLayout(0);
 
     const x: u32 = @intFromFloat(@round(layout.size.x));
@@ -95,8 +98,17 @@ pub fn render(self: *Self, tree: *Tree, writer: std.io.AnyWriter, clear_screen: 
         self.node_map.items[i] = 0;
     }
 
+    var render_context = RenderContext{};
+    defer render_context.deinit(allocator);
+    var selection_iter = tree.selections.valueIterator();
+    while (selection_iter.next()) |selection| {
+        const range = selection.getRange(tree);
+        try render_context.selection_starts.put(allocator, range.start.node_id, .{ range.start.offset, selection.direction != .forward });
+        try render_context.selection_ends.put(allocator, range.end.node_id, .{ range.end.offset, selection.direction == .forward });
+    }
+
     // Handle potential style computation errors in renderNode
-    self.renderNode(tree, 0, .{ .x = 0, .y = 0 }) catch |err| {
+    self.renderNode(&render_context, tree, 0, .{ .x = 0, .y = 0 }) catch |err| {
         logger.err("Error during rendering: {any}\n", .{err});
         // Continue with basic rendering even if style computation fails
     };
@@ -104,11 +116,23 @@ pub fn render(self: *Self, tree: *Tree, writer: std.io.AnyWriter, clear_screen: 
     try self.canvas.render(writer, clear_screen);
 }
 
-pub fn renderNode(self: *Self, tree: *Tree, node_id: NodeId, position: Point(f32)) anyerror!void {
+const RenderContext = struct {
+    selection_starts: std.AutoHashMapUnmanaged(NodeId, struct { usize, bool }) = .{},
+    selection_ends: std.AutoHashMapUnmanaged(NodeId, struct { usize, bool }) = .{},
+    selection_active: bool = false,
+    pub fn deinit(self: *RenderContext, allocator: std.mem.Allocator) void {
+        self.selection_starts.deinit(allocator);
+        self.selection_ends.deinit(allocator);
+    }
+};
+
+pub fn renderNode(self: *Self, render_context: *RenderContext, tree: *Tree, node_id: NodeId, position: Point(f32)) anyerror!void {
     const node = tree.getNode(node_id);
     const layout = node.layout;
 
     const style = tree.getComputedStyle(node_id);
+    const starts_selection = render_context.selection_starts.get(node_id);
+    const ends_selection = render_context.selection_ends.get(node_id);
 
     const absolute_position = position.add(layout.location);
     const is_text_root = style.display.isInlineFlow();
@@ -133,7 +157,13 @@ pub fn renderNode(self: *Self, tree: *Tree, node_id: NodeId, position: Point(f32
         const children = tree.getChildren(node_id);
         const is_scrollable = style.overflow.y == .scroll or style.overflow.x == .scroll;
         const scroll_offset: Point(f32) = if (is_scrollable) node.scroll_offset else .{ .x = 0, .y = 0 };
-        for (children.items) |child| {
+        for (children.items, 0..) |child, i| {
+            if (starts_selection != null and starts_selection.?.@"0" == i) {
+                render_context.selection_active = true;
+            }
+            defer if (ends_selection != null and ends_selection.?.@"0" == i) {
+                render_context.selection_active = false;
+            };
             const child_layout = tree.getLayout(child);
             const child_viewport_rect: Canvas.Rect = .{
                 .pos = absolute_position.add(child_layout.location).sub(scroll_offset),
@@ -156,7 +186,7 @@ pub fn renderNode(self: *Self, tree: *Tree, node_id: NodeId, position: Point(f32
                 };
                 self.canvas.mask = self.canvas.mask.intersect(inner_rect);
             }
-            try self.renderNode(tree, child, absolute_position.sub(scroll_offset));
+            try self.renderNode(render_context, tree, child, absolute_position.sub(scroll_offset));
         }
 
         return;
@@ -186,13 +216,46 @@ pub fn renderNode(self: *Self, tree: *Tree, node_id: NodeId, position: Point(f32
                             .size = .{ .x = part.size.x, .y = part.size.y },
                         }, background_color);
                     }
+                    const selection_start = blk: {
+                        if (render_context.selection_starts.get(part.node_id)) |start| {
+                            if (start.@"0" >= part.node_offset and start.@"0" < part.node_offset + part.length) {
+                                render_context.selection_active = true;
+                                break :blk start.@"0" - part.node_offset;
+                            }
+                        }
+                        break :blk 0;
+                    };
+
+                    const selection_end = blk: {
+                        if (render_context.selection_ends.get(part.node_id)) |end| {
+                            if (end.@"0" >= part.node_offset and end.@"0" < part.node_offset + part.length) {
+                                render_context.selection_active = false;
+                                break :blk end.@"0" - part.node_offset;
+                            }
+                        }
+                        break :blk if (render_context.selection_active) part.length else 0;
+                    };
+                    if (selection_start < selection_end) {
+                        try self.canvas.drawRectBg(.{
+                            .pos = pos.add(.{ .x = @floatFromInt(selection_start), .y = 0 }),
+                            .size = .{ .x = @floatFromInt(selection_end - selection_start), .y = part.size.y },
+                        }, .{ .solid = Color.tw.red_400.alpha(0.5) });
+                    }
+
                     // Draw string with formatting
                     try self.canvas.drawStringFormatted(.{
                         .x = pos.x,
                         .y = pos.y,
                     }, str, part_computed_style.foreground_color, text_format);
+                    // if (render_context.selection_active) {
+                    //     try self.canvas.drawRectBg(.{
+                    //         .pos = pos,
+                    //         .size = .{ .x = part.size.x, .y = part.size.y },
+                    //     }, .{ .solid = Color.tw.red_400.alpha(0.5) });
+                    // }
                 } else {
                     try self.renderNode(
+                        render_context,
                         tree,
                         part.node_id,
                         pos,
@@ -208,11 +271,12 @@ test "rendertree" {
 
     var tree = try Tree.parseTree(allocator,
         \\<view 
-        \\  style="height:15; width:34;display:block;border-style: solid;gap: 0; text-align: center;"
+        \\  style="height:15;  width:34;display:block;border-style: solid;gap: 0; text-align: center;"
+        \\  
         \\>
         // \\    <text>Lorem ipsum dolor sit amet, consectetur adibpiscing elit. Aliquam varius justo ac neque maximus lobortis. Nam molestie sit amet est aliquet dictum. Phasellus tincidunt, enim condimentum mattis efficitur, ante erat eleifend eros, in feugiat nisi mauris dignissim libero. Praesent fermentum pharetra sapien, nec dapibus risus. Proin dolor risus, bibendum nec est sed, rutrum consequat mauris. Praesent fermentum mollis sem a vestibulum. Duis sit amet bibendum lorem. Cras eget semper elit. Phasellus eu leo eleifend, consectetur orci vitae, consequat quam.</text>
-        \\    <text>Lorem ipsum dolor sit amet, consectetur adibp1  iscing elit. Aliquam varius justo.</text>
-        \\    <text>Lorem <view style="width:1;height:2;background-color: blue;display:inline-block;"></view> ipsum dolor d</text>
+        \\    <text selectionStart="3">Lorem ipsum dolor sit amet, consectetur adibp1  iscing elit. Aliquam varius justo.</text>
+        \\    <text  selectionEnd="10">Lorem <view style="width:1;height:2;background-color: blue;display:inline-block;"></view> ipsum dolor d</text>
         \\</view>
     );
     defer tree.deinit();
@@ -229,11 +293,16 @@ test "rendertree" {
         },
         .y = .max_content,
     });
+
+    if (tree.getFirstSelection()) |selection| {
+        std.debug.print("selection: {any}\n", .{selection.getRange(&tree)});
+    }
+
     std.debug.print("--------------------------------\n", .{});
     // // for (0..10) |_| {
     // //     try writer.print("\n\n", .{});
     // try writer.print("\n\n", .{});
-    try renderer.render(&tree, writer, false);
+    try renderer.render(allocator, &tree, writer, false);
     try writer.print("\n\n", .{});
     // defer tree.deinit();
     // // }

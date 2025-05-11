@@ -2,52 +2,8 @@ const Node = @import("./Node.zig");
 const Tree = @import("./Tree.zig");
 const std = @import("std");
 const Order = std.math.Order;
+const BoundaryPoint = @import("./BoundaryPoint.zig");
 
-pub const BoundaryPoint = struct {
-    node_id: Node.NodeId,
-    offset: u32,
-
-    pub fn format(self: BoundaryPoint, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-        try writer.print("BP({d}, {d})", .{ self.node_id, self.offset });
-    }
-    // pub fn order(self: BoundaryPoint, tree: *Tree, other: BoundaryPoint) !Order {
-    //     const node_a = self.node_id;
-    //     const node_b = other.node_id;
-    //     const offset_a = self.offset;
-    //     const offset_b = other.offset;
-    //     if (tree.getNode(node_a).root() != tree.getNode(node_b).root()) {
-    //         // Assert: nodeA and nodeB have the same root.
-    //         return error.NodesNotInSameTree;
-    //     }
-    //     // The position of a boundary point (nodeA, offsetA) relative to a boundary point (nodeB, offsetB) is before, equal, or after, as returned by these steps:
-
-    //     // If nodeA is nodeB, then return equal if offsetA is offsetB, before if offsetA is less than offsetB, and after if offsetA is greater than offsetB.
-    //     if (node_a == node_b) {
-    //         if (offset_a == offset_b) {
-    //             return Order.eq;
-    //         } else if (offset_a < offset_b) {
-    //             return Order.lt;
-    //         } else {
-    //             return Order.gt;
-    //         }
-    //     }
-
-    //     // If nodeA is following nodeB, then if the position of (nodeB, offsetB) relative to (nodeA, offsetA) is before, return after, and if it is after, return before.
-
-    //     // If nodeA is an ancestor of nodeB:
-
-    //     // Let child be nodeB.
-
-    //     // While child is not a child of nodeA, set child to its parent.
-
-    //     // If child's index is less than offsetA, then return after.
-
-    //     // Return before.
-
-    // }
-};
 pub const Id = u32;
 id: Id,
 start: BoundaryPoint = .{ .node_id = 0, .offset = 0 },

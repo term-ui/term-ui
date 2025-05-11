@@ -19,16 +19,17 @@ const InputManager = @import("../../cmd/input/manager.zig").AnyInputManager;
 const Event = @import("../../cmd/input/manager.zig").Event;
 const String = @import("String.zig");
 const Range = @import("Range.zig");
-const BoundaryPoint = Range.BoundaryPoint;
+const BoundaryPoint = @import("BoundaryPoint.zig");
 const NodeIterator = @import("NodeIterator.zig");
+const Selection = @import("Selection.zig");
 const traversal = @import("./traversal.zig");
 node_map: std.AutoHashMapUnmanaged(Node.NodeId, Node) = .{},
 allocator: std.mem.Allocator,
 style_manager: StyleManager,
 computed_style_cache: ComputedStyleCache,
 input_manager: ?InputManager = null,
-
 node_id_counter: Node.NodeId = 0,
+selections: std.AutoHashMapUnmanaged(Node.NodeId, Selection) = .{},
 
 live_ranges: std.AutoHashMapUnmanaged(u32, Range) = .{},
 live_range_counter: u32 = 0,
@@ -47,7 +48,49 @@ pub fn init(allocator: std.mem.Allocator) !Self {
         // },
     };
 }
+pub fn getFirstSelectionId(self: *Self) ?Selection.Id {
+    var it = self.selections.valueIterator();
+    return if (it.next()) |selection| selection.range_id else null;
+}
+pub fn getFirstSelection(self: *Self) ?*Selection {
+    var it = self.selections.valueIterator();
+    return if (it.next()) |selection| selection else null;
+}
+pub fn getSelection(self: *Self, selection_id: Selection.Id) *Selection {
+    return self.selections.getPtr(selection_id);
+}
+pub fn getRange(self: *Self, range_id: Range.Id) *Range {
+    return self.live_ranges.getPtr(range_id);
+}
 
+pub fn createSelection(self: *Self, start: BoundaryPoint, end: ?BoundaryPoint) !Selection.Id {
+    const range_id = try self.createLiveRange(.{
+        .node_id = start.node_id,
+        .offset = start.offset,
+    }, .{
+        .node_id = start.node_id,
+        .offset = start.offset,
+    });
+    // if (end) |end_point| {
+    try self.selections.put(self.allocator, start.node_id, Selection{
+        .range_id = range_id,
+        .direction = .none,
+    });
+
+    try self.selections.getPtr(start.node_id).?.setRange(self, start, end orelse start);
+    // } else
+    return range_id;
+}
+pub fn createNodeIterator(self: *Self, root: Node.NodeId, whatToShow: u8) NodeIterator {
+    return NodeIterator{
+        .reference_node = root,
+        // .allocator = self.allocator,
+        .whatToShow = whatToShow,
+        .tree = self,
+
+        // .filter = filter,
+    };
+}
 pub fn enableInputManager(self: *Self) !void {
     self.input_manager = .{
         .allocator = self.allocator,
@@ -857,6 +900,7 @@ pub fn deinit(self: *Self) void {
     self.node_map.deinit(self.allocator);
 
     self.live_ranges.deinit(self.allocator);
+    self.selections.deinit(self.allocator);
     // Clean up style system
     self.style_manager.deinit();
     self.computed_style_cache.deinit();
@@ -924,7 +968,7 @@ pub inline fn parseTree(allocator: std.mem.Allocator, tree_string: []const u8) !
     const doc = try xml.parse(arena_allocator, tree_string);
     var tree = try init(allocator);
     errdefer tree.deinit();
-    _ = try fromXmlElement(&tree, doc.root);
+    _ = try fromXmlElement(&tree, doc.root, null);
 
     return tree;
 }
@@ -957,48 +1001,92 @@ const PrintTreeError = error{
     NotFound,
     HierarchyRequestError,
     NotFoundError,
+    Overflow,
+    InvalidCharacter,
+    NotInTheSameTree,
+    OutOfBounds,
+    StartAfterEnd,
 };
 inline fn textNodeFromXmlElement(
     tree: *Self,
     xml_node: *xml.Element,
-) PrintTreeError!Node.NodeId {
+    parent_id: ?Node.NodeId,
+) PrintTreeError!void {
     // const node_id = try tree.createTextNode("");
     const node_id = try tree.createNode();
+    if (parent_id) |parent| {
+        _ = try tree.appendChild(parent, node_id);
+    }
     var node = tree.getNode(node_id);
     node.styles.display = .{ .inside = .flow, .outside = .@"inline" };
 
     var it = xml_node.iterator();
+    var curr_offset: usize = 0;
     while (it.next()) |content| {
         switch (content.*) {
             .char_data => |text| {
                 const text_node_id = try tree.createTextNode(text);
                 _ = try tree.appendChild(node_id, text_node_id);
                 try tree.setText(text_node_id, text);
+
+                for (xml_node.attributes) |attr| {
+                    if (std.mem.eql(u8, attr.name, "selectionStart")) {
+                        const offset: u32 = try std.fmt.parseInt(u32, attr.value, 10);
+                        if (offset >= curr_offset and offset < curr_offset + text.len) {
+                            if (tree.getFirstSelection()) |selection| {
+                                try selection.setAnchor(tree, .{ .node_id = text_node_id, .offset = offset });
+                            } else {
+                                _ = try tree.createSelection(.{ .node_id = text_node_id, .offset = offset }, null);
+                            }
+                        }
+
+                        continue;
+                    }
+                    if (std.mem.eql(u8, attr.name, "selectionEnd")) {
+                        const offset: u32 = try std.fmt.parseInt(u32, attr.value, 10);
+                        if (offset >= curr_offset and offset < curr_offset + text.len) {
+                            if (tree.getFirstSelection()) |selection| {
+                                try selection.setFocus(tree, .{ .node_id = text_node_id, .offset = offset });
+                            } else {
+                                _ = try tree.createSelection(.{ .node_id = text_node_id, .offset = offset }, null);
+                            }
+                        }
+                        continue;
+                    }
+                }
+                curr_offset += text.len;
             },
             .element => |el| {
                 // errorFromFunction(fromXmlElement);
-                const child_id = try fromXmlElement(tree, el);
-                _ = try tree.appendChild(node_id, child_id);
+                const child_id = try fromXmlElement(tree, el, node_id);
+                _ = child_id; // autofix
+                // _ = try tree.appendChild(node_id, child_id);
             },
             else => {
                 std.debug.print("unknown content {s}\n", .{@tagName(content.*)});
             },
         }
     }
-    return node_id;
+
+    // return node_id;
 }
 fn fromXmlElement(
     tree: *Self,
     xml_node: *xml.Element,
-) PrintTreeError!Node.NodeId {
+    parent_id: ?Node.NodeId,
+) PrintTreeError!void {
     const is_text_node = std.mem.eql(u8, xml_node.tag, "text");
     if (is_text_node) {
         return textNodeFromXmlElement(
             tree,
             xml_node,
+            parent_id,
         );
     }
     const node_id = try tree.createNode();
+    if (parent_id) |parent| {
+        _ = try tree.appendChild(parent, node_id);
+    }
 
     // // var style = Style.init(tree.allocator);
     // // errdefer style.deinit();
@@ -1007,6 +1095,22 @@ fn fromXmlElement(
     // if (is_text_node) {
     //     style.display = .{ .inside = .flow, .outside = .@"inline" };
     // }
+
+    for (xml_node.children) |child| {
+        switch (child) {
+            .element => |el| {
+                const child_id = try fromXmlElement(tree, el, node_id);
+                _ = child_id; // autofix
+                // _ = try tree.appendChild(node_id, child_id);
+            },
+            // .char_data => |text| {
+            //     if (!is_text_node) continue;
+            //     const child_id = try tree.createTextNode(text);
+            //     _ = try tree.appendChild(node_id, child_id);
+            // },
+            else => {},
+        }
+    }
 
     for (xml_node.attributes) |attr| {
         if (std.mem.eql(u8, attr.name, "style")) {
@@ -1021,22 +1125,27 @@ fn fromXmlElement(
             tree.getNode(node_id).scroll_offset.x = std.fmt.parseFloat(f32, attr.value) catch unreachable;
             continue;
         }
-    }
-    for (xml_node.children) |child| {
-        switch (child) {
-            .element => |el| {
-                const child_id = try fromXmlElement(tree, el);
-                _ = try tree.appendChild(node_id, child_id);
-            },
-            // .char_data => |text| {
-            //     if (!is_text_node) continue;
-            //     const child_id = try tree.createTextNode(text);
-            //     _ = try tree.appendChild(node_id, child_id);
-            // },
-            else => {},
+        if (std.mem.eql(u8, attr.name, "selectionStart")) {
+            const offset: u32 = try std.fmt.parseInt(u32, attr.value, 10);
+            if (tree.getFirstSelection()) |selection| {
+                try selection.setAnchor(tree, .{ .node_id = node_id, .offset = offset });
+            } else {
+                _ = try tree.createSelection(.{ .node_id = node_id, .offset = offset }, null);
+            }
+
+            continue;
+        }
+        if (std.mem.eql(u8, attr.name, "selectionEnd")) {
+            const offset: u32 = try std.fmt.parseInt(u32, attr.value, 10);
+            if (tree.getFirstSelection()) |selection| {
+                try selection.setFocus(tree, .{ .node_id = node_id, .offset = offset });
+            } else {
+                _ = try tree.createSelection(.{ .node_id = node_id, .offset = offset }, null);
+            }
+            continue;
         }
     }
-    return node_id;
+    // return node_id;
 }
 
 /// Get the computed style for a node, accounting for inheritance and cascading

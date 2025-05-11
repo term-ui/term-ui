@@ -247,6 +247,7 @@ pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tre
                 try final_parts.append(.{
                     .node_id = part.node_id,
                     .start = intersection_start,
+                    .node_offset = intersection_start - part.start,
                     .length = slice.len,
                     .size = .{ .x = measure(slice), .y = part.size.y },
                     .display = part.display,

@@ -122,6 +122,7 @@ pub const TextPart = struct {
     margin: Rect(f32) = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
     position: Point(f32) = .{ .x = 0, .y = 0 },
     size: Point(f32) = .{ .x = 0, .y = 0 },
+    node_offset: usize = 0,
 
     pub fn isInlineText(self: TextPart) bool {
         return self.display.outside == .@"inline" and self.display.inside == .flow;

@@ -8,7 +8,7 @@ pointer_before_reference_node: bool = false,
 what_to_show: u32 = whatToShow.SHOW_ALL,
 // filter: ?NodeFilter,
 
-const whatToShow = struct {
+pub const whatToShow = struct {
     pub const SHOW_ALL: u32 = 0xFFFFFFFF;
     pub const SHOW_ELEMENT: u32 = 1;
 

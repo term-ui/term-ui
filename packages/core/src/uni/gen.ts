@@ -4,7 +4,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import path, { resolve } from "node:path";
 import {
   argv,
   exit,
@@ -25,6 +25,10 @@ const upperCamelCase = (str: string) =>
   upperFirst(camelCase(str));
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+const __dirname = dirname(
+  fileURLToPath(import.meta.url),
+);
 
 const files: {
   path: string;
@@ -33,10 +37,16 @@ const files: {
   defaultValue: boolean | string;
   name: string;
 }[] = [
-  // {
-  //   path: "data/16.0.0/ucd/auxiliary/GraphemeBreakProperty.txt",
-  //   url: "https://www.unicode.org/Public/16.0.0/ucd/auxiliary/GraphemeBreakProperty.txt",
-  // },
+  {
+    path: path.join(
+      __dirname,
+      "data/16.0.0/ucd/auxiliary/GraphemeBreakProperty.txt",
+    ),
+    url: "https://www.unicode.org/Public/16.0.0/ucd/auxiliary/GraphemeBreakProperty.txt",
+    type: "enum",
+    defaultValue: "Other",
+    name: "GraphemeBreak",
+  },
   // {
   //   path: "data/16.0.0/ucd/auxiliary/WordBreakProperty.txt",
   //   url: "https://www.unicode.org/Public/16.0.0/ucd/auxiliary/WordBreakProperty.txt",
@@ -46,32 +56,50 @@ const files: {
   //   url: "https://www.unicode.org/Public/16.0.0/ucd/auxiliary/SentenceBreakProperty.txt",
   // },
   {
-    path: "data/16.0.0/ucd/extracted/DerivedLineBreak.txt",
+    path: path.join(
+      __dirname,
+      "data/16.0.0/ucd/extracted/DerivedLineBreak.txt",
+    ),
     url: "https://www.unicode.org/Public/16.0.0/ucd/extracted/DerivedLineBreak.txt",
     type: "enum",
     defaultValue: "XX",
     name: "LineBreak",
   },
   {
-    path: "data/16.0.0/ucd/emoji/emoji-data.txt",
+    path: path.join(
+      __dirname,
+      "data/16.0.0/ucd/emoji/emoji-data.txt",
+    ),
     url: "https://www.unicode.org/Public/16.0.0/ucd/emoji/emoji-data.txt",
     type: "bool",
     defaultValue: true,
     name: "Emoji",
   },
-  // {
-  //   path: "data/16.0.0/ucd/DerivedCoreProperties.txt",
-  //   url: "https://www.unicode.org/Public/16.0.0/ucd/DerivedCoreProperties.txt",
-  // },
   {
-    path: "data/16.0.0/ucd/extracted/DerivedEastAsianWidth.txt",
+    path: path.join(
+      __dirname,
+      "data/16.0.0/ucd/DerivedCoreProperties.txt",
+    ),
+    url: "https://www.unicode.org/Public/16.0.0/ucd/DerivedCoreProperties.txt",
+    type: "enum",
+    defaultValue: "none",
+    name: "CoreProperty",
+  },
+  {
+    path: path.join(
+      __dirname,
+      "data/16.0.0/ucd/extracted/DerivedEastAsianWidth.txt",
+    ),
     url: "https://www.unicode.org/Public/16.0.0/ucd/extracted/DerivedEastAsianWidth.txt",
     type: "enum",
     defaultValue: "N",
     name: "EastAsianWidth",
   },
   {
-    path: "data/16.0.0/ucd/extracted/DerivedGeneralCategory.txt",
+    path: path.join(
+      __dirname,
+      "data/16.0.0/ucd/extracted/DerivedGeneralCategory.txt",
+    ),
     url: "https://www.unicode.org/Public/16.0.0/ucd/extracted/DerivedGeneralCategory.txt",
     type: "enum",
     defaultValue: "X",
@@ -300,7 +328,7 @@ function iterCodePointProperties(
             ) {
               result.push([
                 cp,
-                { fields: parts.slice(1) },
+                { fields: [parts.slice(1).join("_")] },
               ]);
             }
           }
@@ -311,10 +339,7 @@ function iterCodePointProperties(
           16,
         );
         if (!Number.isNaN(cp)) {
-          result.push([
-            cp,
-            { fields: parts.slice(1) },
-          ]);
+          result.push([cp, { fields: [parts.slice(1).join("_")] }]);
         }
       }
     }
@@ -490,7 +515,7 @@ async function main() {
       const map = new Map<string, boolean[]>();
       // const groupedItems = groupBy(items, (item) => item[1].fields[0] ?? "");
       for (const [cp, record] of items) {
-        const value = record.fields[0];
+        // const value = record.fields[0];
         for (const field of record.fields) {
           if (!map.has(field)) {
             map.set(
@@ -685,15 +710,15 @@ async function main() {
   // if (outputFile === "-") {
   //   stdout.write(zigCode);
   // } else {
-  mkdirSync("src/linebreak/", {
-    recursive: true,
-  });
+  // mkdirSync(path.join(__dirname, "src/linebreak/"), {
+  //   recursive: true,
+  // });
   writeFileSync(
-    "src/linebreak/lookups.zig",
+    path.join(__dirname, "lookups.zig"),
     zigCode,
   );
   console.error(
-    "Output written to src/linebreak/lookups.zig",
+    `Output written to ${path.join(__dirname, "lookups.zig")}`,
   );
   // }
   return;
