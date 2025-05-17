@@ -347,69 +347,13 @@ pub fn extendBy(
     tree: *Tree,
     granularity: ExtendGranularity,
     direction: ExtendDirection,
+    ghost_horizontal_position: ?f32,
+    root_node_id: Node.NodeId,
 ) !void {
-    const focus = self.getFocus(tree);
-    const line_box_indexes = findLineBox(tree, focus) orelse return;
-    const computed_text = tree.getComputedText(line_box_indexes.root_node_id) orelse return;
-    const line = computed_text.lines.items[line_box_indexes.line_index];
-    const part = line.parts.items[line_box_indexes.part_index];
-    _ = part; // autofix
-
-    if (granularity == .lineboundary) {
-        if (direction == .forward) {
-            const last_part = line.parts.getLast();
-            try self.setAnchor(tree, BoundaryPoint{ .node_id = last_part.node_id, .offset = last_part.node_offset + last_part.length });
-            // self.setRange(tree, focus, BoundaryPoint{ .node_id = part.node_id, .offset = part.node_offset + part.length });
-        } else {
-            const first_part = line.parts.getFirst();
-            try self.setAnchor(tree, BoundaryPoint{ .node_id = first_part.node_id, .offset = first_part.node_offset });
-            // self.setRange(tree, focus, BoundaryPoint{ .node_id = part.node_id, .offset = part.node_offset });
-        }
-    }
-    // const part_rect = Canvas.Rect{ .pos = line.position.add(part.position), .size = part.size };
-
-    // if (tree.getNodeKind(focus.node_id) != .text) {
-    //     return;
-    // }
-    // // find root
-    // var current = focus.node_id;
-    // while (true) {
-    //     if (tree.getStyle(current).display.isFlowRoot()) {
-    //         break;
-    //     }
-    //     if (tree.getNode(current).parent) |parent| {
-    //         current = parent;
-    //     } else {
-    //         break;
-    //     }
-    // }
-    // const computed_style = tree.getComputedText(current) orelse return;
-    // if (computed_style.lines.items.len == 0) {
-    //     return;
-    // }
-    // var line_index: usize = 0;
-    // var part_index: usize = 0;
-    // for (computed_style.lines.items, 0..) |line, i| {
-    //     for (line.parts.items, 0..) |part, j| {
-    //         if (part.node_id == focus.node_id and focus.offset >= part.node_offset and focus.offset < part.node_offset + part.length) {
-    //             line_index = i;
-    //             part_index = j;
-    //             break;
-    //         }
-    //     }
-    //     // if (line.parts.getLastOrNull()) |last_part| {
-    //     //     if (last_part.node_offset + last_part.length > focus.offset) {
-    //     //         line_index = i;
-    //     //         continue;
-    //     //     }
-    //     //     break;
-    //     // }
-    // }
-    // const line = computed_style.lines.items[line_index];
-    // var line_rect = Canvas.Rect{ .pos = line.position, .size = line.size };
-    // var hit_position = switch (direction) {
-    //     .forward => line_rect.pos.add(.{ .x = line_rect.size.width, .y = 0 }),
-    //     .backward => line_rect.pos.sub(.{ .x = 0, .y = line_rect.size.height }),
-    // };
-
+    _ = self; // autofix
+    _ = tree; // autofix
+    _ = granularity; // autofix
+    _ = direction; // autofix
+    _ = ghost_horizontal_position; // autofix
+    _ = root_node_id; // autofix
 }
