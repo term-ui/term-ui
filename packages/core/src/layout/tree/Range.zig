@@ -73,8 +73,6 @@ pub fn setEnd(self: *Self, tree: *Tree, node_id: Node.NodeId, offset: u32) !void
 
     // Let bp be the boundary point (node, offset).
     const bp = BoundaryPoint{ .node_id = node_id, .offset = offset };
-    std.debug.print("setEnd: {any}\n", .{try boundaryPointTreeOrder(tree, self.start, bp)});
-    std.debug.print("bp: {any} start: {any}\n", .{ bp, self.start });
     // If range's root is not equal to node's root
     if (tree.getNodeRoot(node_id) != self.getRoot(tree)) {
         self.start = bp;
@@ -885,7 +883,7 @@ pub fn boundaryPointTreeOrder(tree: *Tree, boundary_point: BoundaryPoint, other:
         return .gt;
     }
 
-    unreachable;
+    std.debug.panic("Shouldn't happen", .{});
 }
 test "boundaryPointTreeOrder - comprehensive" {
     var tree = try Tree.init(std.testing.allocator);

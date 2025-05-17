@@ -280,7 +280,7 @@ pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: N
     for (tree.getChildren(node_id).items, 0..) |child_id, order| {
         const child_style = tree.getComputedStyle(child_id);
         if (child_style.display.outside == .none) {
-            tree.setUnroundedLayout(child_id, .{ .order = @as(u32, @intCast(order)) });
+            tree.setUnroundedLayout(child_id, .{ .order = @as(u32, @intCast(order)), .margin = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 } });
             _ = try perform_child_layout(
                 allocator,
                 child_id,
@@ -2094,6 +2094,7 @@ pub fn calculate_flex_item(
         .location = location,
         .padding = item.padding,
         .border = item.border,
+        .margin = item.margin,
     });
 
     total_offset_main.* += item.offset_main + dir.sumMainAxis(item.margin) + dir.getMain(size);
@@ -2356,6 +2357,7 @@ pub fn perform_absolute_layout_on_absolute_children(
             .location = location,
             .padding = padding,
             .border = border,
+            .margin = resolved_margin,
         });
 
         const size_content_size_contribution = .{

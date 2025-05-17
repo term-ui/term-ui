@@ -1,7 +1,12 @@
-import { initFromFile } from "@term-ui/core/node";
+import { initFromFile, distDir } from "@term-ui/core/node";
 import { Document } from "@term-ui/dom";
-
-const module = await initFromFile();
+import path from "node:path";
+const module = await initFromFile(path.join(distDir, "core-debug.wasm"), {
+  logFn: (log) => {
+    // if (log.level === "error") {
+    // console.error(log);
+  },
+});
 
 const document = new Document(module, {
   size: {
@@ -21,8 +26,19 @@ document.root.setStyle(`
   flex-direction: column;
   align-items: center;
   justify-content: center;
+
 `);
 
+const text = document.createTextNode(
+  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+);
+document.root.appendChild(text);
+const bpNode = document.createTextNode("[]");
+
+document.root.appendChild(bpNode);
+// bpNode.setStyle(`
+
+//   `);
 const button = document.createElement("text");
 
 button.setStyle(`
@@ -46,6 +62,74 @@ button.addEventListener("click", () => {
   }, 3000);
 });
 
+// document.root.addEventListener("click", (e) => {
+//   const bp = document.caretPositionFromPoint(
+//     e.x,
+//     e.y,
+//   );
+//   if (bp) {
+//     // bpNode.setText(JSON.stringify(bp));
+//     document.render(true);
+//   }
+// });
+// document.root.addEventListener(
+//   "mouse-down",
+//   (e) => {
+//     const bp = document.caretPositionFromPoint(
+//       e.x,
+//       e.y,
+//     );
+//     if (!bp) return;
+//     document.createSelection(bp);
+//     bpNode.setText(JSON.stringify(bp));
+//     document.render(true);
+//   },
+// );
+let pressed = false;
+const updateBpNode = () => {
+  const selection = document.selection;
+
+  const anchor = selection?.getAnchor();
+  const focus = selection?.getFocus();
+  const str = `[${anchor?.node ?? "null"}~${anchor?.offset ?? "null"}] [${focus?.node ?? "null"}~${focus?.offset ?? "null"}]`;
+  bpNode.setText(str);
+  document.render(true);
+};
+document.inputManager?.subscribe((e) => {
+  if (e.kind !== "mouse") return;
+  if (e.action === "press") {
+    pressed = true;
+    const bp = document.caretPositionFromPoint(
+      e.x,
+      e.y,
+    );
+    if (!bp) return;
+    // console.log("bp", bp);
+    document.createSelection(bp);
+    document.render(true);
+
+    // updateBpNode();
+    updateBpNode();
+  }
+  if (e.action === "motion") {
+    if (!pressed) return;
+    const selection = document.selection;
+    if (!selection) return;
+
+    const bp = document.caretPositionFromPoint(
+      e.x,
+      e.y,
+    );
+    if (!bp) return;
+    selection.setFocus(bp.node, bp.offset);
+    updateBpNode();
+    // updateBpNode();
+
+  }
+  if (e.action === "release") {
+    pressed = false;
+  }
+});
 button.addEventListener("mouse-enter", () => {
   button.setStyleProperty(
     "border-color",

@@ -5,6 +5,7 @@ import {
   boolean,
   function_,
   instance,
+  literal,
   number,
   object,
   optional,
@@ -115,7 +116,46 @@ export const getSchema = (
     }),
   );
 
+  const NULL = 4294967295;
+  const boundaryPointSchema = pipe(
+    number(),
+    transform(
+      (
+        ptr,
+      ): {
+        node: number;
+        offset: number;
+      } | null => {
+        const array = new Uint32Array(
+          memory.buffer,
+          ptr,
+          2,
+        );
+        if (array[0] === NULL) {
+          return null;
+        }
+        return {
+          node: array[0] as number,
+          offset: array[1] as number,
+        };
+      },
+    ),
+  );
+
   return object({
+    // NULL: pipe(
+    //   instance(WebAssembly.Global),
+    //   transform((ptr) => {
+    //     const array = new Uint32Array(
+    //       memory.buffer,
+    //       ptr.value,
+    //       1,
+    //     );
+    //     const value = array[0];
+    //     console.log("array", value);
+    //     return value;
+    //   }),
+    // ),
     Tree_init: pipe(
       function_(),
       args(tuple([])),
@@ -162,21 +202,14 @@ export const getSchema = (
     Tree_appendChild: pipe(
       function_(),
       args(tuple([number(), number(), number()])),
-      returns(void_()),
+      returns(number()),
       catchError("Tree_appendChild"),
     ),
 
     Tree_insertBefore: pipe(
       function_(),
-      args(
-        tuple([
-          number(),
-          number(),
-          number(),
-          number(),
-        ]),
-      ),
-      returns(void_()),
+      args(tuple([number(), number(), number()])),
+      returns(number()),
       catchError("Tree_insertBefore"),
     ),
 
@@ -218,7 +251,7 @@ export const getSchema = (
           number(),
         ]),
       ),
-      returns(void_()),
+      returns(number()),
       catchError("Tree_appendChildAtIndex"),
     ),
 
@@ -362,6 +395,20 @@ export const getSchema = (
       returns(number()),
       catchError("Tree_consumeEvents"),
     ),
+    Tree_caretPositionFromPoint: pipe(
+      function_(),
+      args(
+        tuple([
+          number(),
+          number(),
+          number(),
+          number(),
+          number(),
+        ]),
+      ),
+      returns(boundaryPointSchema),
+      catchError("Tree_caretPositionFromPoint"),
+    ),
     Tree_enableInputManager: pipe(
       function_(),
       args(tuple([number()])),
@@ -374,6 +421,77 @@ export const getSchema = (
       returns(void_()),
       catchError("Tree_disableInputManager"),
     ),
+    Tree_createSelection: pipe(
+      function_(),
+      args(
+        tuple([
+          number(),
+          number(),
+          number(),
+          number(),
+          number(),
+        ]),
+      ),
+      returns(number()),
+      catchError("Tree_createSelection"),
+    ),
+    Tree_removeSelection: pipe(
+      function_(),
+      args(tuple([number(), number()])),
+      returns(void_()),
+      catchError("Tree_removeSelection"),
+    ),
+    Selection_getAnchor: pipe(
+      function_(),
+      args(tuple([number(), number()])),
+      returns(boundaryPointSchema),
+      catchError("Selection_getAnchor"),
+    ),
+    Selection_getFocus: pipe(
+      function_(),
+      args(tuple([number(), number()])),
+      returns(boundaryPointSchema),
+      catchError("Selection_getFocus"),
+    ),
+    Selection_setAnchor: pipe(
+      function_(),
+      args(
+        tuple([
+          number(),
+          number(),
+          number(),
+          number(),
+        ]),
+      ),
+      returns(void_()),
+      catchError("Selection_setAnchor"),
+    ),
+    Selection_setFocus: pipe(
+      function_(),
+      args(
+        tuple([
+          number(),
+          number(),
+          number(),
+          number(),
+        ]),
+      ),
+      returns(void_()),
+      catchError("Selection_setFocus"),
+    ),
+    Selection_getDirection: pipe(
+      function_(),
+      args(tuple([number(), number()])),
+      returns(
+        union([
+          literal(1),
+          literal(-1),
+          literal(0),
+        ]),
+      ),
+      catchError("Selection_getDirection"),
+    ),
+
     Renderer_init: pipe(
       function_(),
       args(tuple([])),

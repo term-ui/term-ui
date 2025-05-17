@@ -21,7 +21,7 @@
     "dev:wasm": "watchexec -e zig -- zig build wasm",
     "build:js": "tsc -p tsconfig.build.json && wasm-opt -Oz --strip-dwarf -o dist/core.wasm zig-out/bin/core.wasm && cp zig-out/bin/core-debug.wasm dist/core-debug.wasm ",
     "build": "rm -rf dist && pnpm run build:wasm && pnpm run build:wasm:debug && pnpm run build:js",
-    "dev": "watchexec -e ts,zig,wasm -- pnpm run build:wasm && pnpm run build:js"
+    "dev": "pnpm run build:wasm --watch  && pnpm run build:js"
   },
   "devDependencies": {
     "@term-ui/shared": "workspace:*"

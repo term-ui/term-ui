@@ -1,6 +1,7 @@
 const Node = @import("./Node.zig");
 const Tree = @import("./Tree.zig");
 const traversal = @import("./traversal.zig");
+const std = @import("std");
 
 tree: *Tree,
 reference_node: Node.NodeId,
@@ -138,4 +139,52 @@ pub fn nextNode(self: *Self) ?Node.NodeId {
 
 pub fn previousNode(self: *Self) ?Node.NodeId {
     return self.offsetNode(false);
+}
+
+test "NodeIterator" {
+    const allocator = std.testing.allocator;
+    var tree = try Tree.parseTree(allocator,
+        \\<view>
+        \\  <view>
+        \\    <view>
+        \\      <view></view>
+        \\    </view>
+        \\    <view>
+        \\      <view></view>
+        \\    </view>
+        \\  </view>
+        \\  <view>
+        \\    <view><text>Hello</text></view>
+        \\    <view></view>
+        \\  </view>
+        \\</view>
+    );
+
+    defer tree.deinit();
+    const writer = std.io.getStdErr().writer().any();
+    try tree.print(writer);
+
+    {
+        var node_iter = tree.createNodeIterator(0);
+        var i: Node.NodeId = 1;
+        while (node_iter.nextNode()) |node_id| {
+            try std.testing.expectEqual(node_id, i);
+            i += 1;
+        }
+    }
+    {
+        var node_iter = tree.createNodeIterator(tree.node_map.count() - 1);
+        var i: Node.NodeId = tree.node_map.count();
+        while (node_iter.previousNode()) |node_id| {
+            i -= 1;
+
+            try std.testing.expectEqual(node_id, i);
+        }
+    }
+    {
+        var node_iter = tree.createNodeIterator(3);
+        while (node_iter.nextNode()) |node_id| {
+            std.debug.print("node_id: {d}\n", .{node_id});
+        }
+    }
 }

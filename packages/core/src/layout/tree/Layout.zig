@@ -11,6 +11,16 @@ content_size: Point(f32) = .{ .x = 0, .y = 0 },
 border: Rect(f32) = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
 padding: Rect(f32) = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
 scrollbar_size: Point(f32) = .{ .x = 0, .y = 0 },
+margin: Rect(f32), // = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
+
+pub const EMPTY = Layout{
+    .location = .{ .x = 0, .y = 0 },
+    .size = .{ .x = 0, .y = 0 },
+    .content_size = .{ .x = 0, .y = 0 },
+    .border = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
+    .padding = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
+    .margin = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
+};
 
 pub fn format(self: Layout, comptime fmt_string: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
     _ = fmt_string; // autofix

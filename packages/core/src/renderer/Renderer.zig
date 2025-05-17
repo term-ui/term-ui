@@ -13,7 +13,7 @@ const debug = @import("../debug.zig");
 const Selection = @import("../layout/tree/Selection.zig");
 const logger = std.log.scoped(.renderer);
 const NodeIterator = @import("../layout/tree/NodeIterator.zig");
-const BoundaryPoint = @import("../layout/tree/Range.zig").BoundaryPoint;
+const BoundaryPoint = @import("../layout/tree/BoundaryPoint.zig");
 
 canvas: Canvas,
 node_map: std.ArrayList(NodeId),
@@ -78,6 +78,8 @@ pub fn getNodeAt(self: *Self, position: Point(f32)) ?NodeId {
     }
     return self.node_map.items[index];
 }
+// pub fn elementFromPoint(self: *Self, position: Point(f32)) ?NodeId {
+// }
 
 pub fn render(self: *Self, allocator: std.mem.Allocator, tree: *Tree, writer: std.io.AnyWriter, clear_screen: bool) !void {
     const layout = tree.getLayout(0);
@@ -103,6 +105,9 @@ pub fn render(self: *Self, allocator: std.mem.Allocator, tree: *Tree, writer: st
     var selection_iter = tree.selections.valueIterator();
     while (selection_iter.next()) |selection| {
         const range = selection.getRange(tree);
+        if (range.isCollapsed()) {
+            continue;
+        }
         try render_context.selection_starts.put(allocator, range.start.node_id, .{ range.start.offset, selection.direction != .forward });
         try render_context.selection_ends.put(allocator, range.end.node_id, .{ range.end.offset, selection.direction == .forward });
     }
@@ -198,13 +203,15 @@ pub fn renderNode(self: *Self, render_context: *RenderContext, tree: *Tree, node
         var computed_text = tree.getComputedText(node_id) orelse std.debug.panic("text node {d} has no computed text\n", .{node_id});
 
         for (computed_text.lines.items) |line| {
+            const line_position = absolute_position.add(line.position);
             for (line.parts.items) |part| {
                 const kind = tree.getNodeKind(part.node_id);
 
                 const part_computed_style = tree.getComputedStyle(part.node_id);
-                const x = position.x + part.position.x + line.position.x + layout.location.x;
-                const y = position.y + part.position.y + line.position.y + layout.location.y;
-                const pos: Point(f32) = .{ .x = x, .y = y };
+                // const x = position.x + part.position.x + line.position.x + layout.location.x;
+                // const y = position.y + part.position.y + line.position.y + layout.location.y;
+                const pos: Point(f32) = line_position.add(part.position);
+
                 if (kind == .text) {
                     const str = computed_text.slice(part.start, part.start + part.length);
 
@@ -218,7 +225,7 @@ pub fn renderNode(self: *Self, render_context: *RenderContext, tree: *Tree, node
                     }
                     const selection_start = blk: {
                         if (render_context.selection_starts.get(part.node_id)) |start| {
-                            if (start.@"0" >= part.node_offset and start.@"0" < part.node_offset + part.length) {
+                            if (start.@"0" >= part.node_offset and start.@"0" <= part.node_offset + part.length) {
                                 render_context.selection_active = true;
                                 break :blk start.@"0" - part.node_offset;
                             }
@@ -228,7 +235,7 @@ pub fn renderNode(self: *Self, render_context: *RenderContext, tree: *Tree, node
 
                     const selection_end = blk: {
                         if (render_context.selection_ends.get(part.node_id)) |end| {
-                            if (end.@"0" >= part.node_offset and end.@"0" < part.node_offset + part.length) {
+                            if (end.@"0" >= part.node_offset and end.@"0" <= part.node_offset + part.length) {
                                 render_context.selection_active = false;
                                 break :blk end.@"0" - part.node_offset;
                             }
@@ -271,12 +278,16 @@ test "rendertree" {
 
     var tree = try Tree.parseTree(allocator,
         \\<view 
-        \\  style="height:15;  width:34;display:block;border-style: solid;gap: 0; text-align: center;"
+        \\  style="display:flex;flex-direction: column;background-color: red; height:10;width:50;"
         \\  
         \\>
-        // \\    <text>Lorem ipsum dolor sit amet, consectetur adibpiscing elit. Aliquam varius justo ac neque maximus lobortis. Nam molestie sit amet est aliquet dictum. Phasellus tincidunt, enim condimentum mattis efficitur, ante erat eleifend eros, in feugiat nisi mauris dignissim libero. Praesent fermentum pharetra sapien, nec dapibus risus. Proin dolor risus, bibendum nec est sed, rutrum consequat mauris. Praesent fermentum mollis sem a vestibulum. Duis sit amet bibendum lorem. Cras eget semper elit. Phasellus eu leo eleifend, consectetur orci vitae, consequat quam.</text>
-        \\    <text selectionStart="3">Lorem ipsum dolor sit amet, consectetur adibp1  iscing elit. Aliquam varius justo.</text>
-        \\    <text  selectionEnd="10">Lorem <view style="width:1;height:2;background-color: blue;display:inline-block;"></view> ipsum dolor d</text>
+        \\<view style="width:30;background-color: blue;text-align: center;margin:auto">
+        \\    <text>Lorem ipsum dolor sit amet </text>
+        \\    <text>Lorem ipsum dolor sit amet </text>
+        \\    <text>Lorem ipsum dolor sit amet </text>
+        \\ </view>
+        // \\    <text selectionStart="3" selectionEnd="10">Lorem ipsum dolor sit amet, consectetur adibp1  iscing elit. Aliquam varius justo.</text>
+        // \\    <text  >Lorem <view style="width:1;height:2;background-color: blue;display:inline-block;"></view> ipsum dolor d</text>
         \\</view>
     );
     defer tree.deinit();
@@ -289,20 +300,40 @@ test "rendertree" {
 
     try tree.computeLayout(allocator, .{
         .x = .{
-            .definite = 30,
+            .definite = 50,
         },
         .y = .max_content,
     });
+    try tree.print(writer);
 
-    if (tree.getFirstSelection()) |selection| {
-        std.debug.print("selection: {any}\n", .{selection.getRange(&tree)});
+    const focus = BoundaryPoint{ .node_id = 5, .offset = 4 };
+    const selection_id = try tree.createSelection(focus, null);
+    var selection = tree.getSelection(selection_id);
+    const bpAbove = Selection.getBoundaryAt(&tree, focus, .documentboundary, .backward, null);
+    // bpAbove = Selection.getBoundaryAt(&tree, focus, .line, .backward, null);
+    std.debug.print("new focus: {any}\n", .{bpAbove});
+    if (bpAbove) |bp| {
+        try selection.setFocus(&tree, bp);
     }
+    // _ = selection; // autofix
+    // try selection.setFocus(&tree, .{ .node_id = 4, .offset = 2 });
+    // for (0..50) |x| {
+    //     for (0..10) |y| {
+    //         const maybe_hit = tree.hitTest(.{ .x = 50, .y = 0 }, .{ .x = @floatFromInt(x), .y = @floatFromInt(y) }, .{});
 
+    //         std.debug.print("hit: {any}\n", .{maybe_hit});
+    //         if (maybe_hit) |hit| {
+    //             try selection.setFocus(&tree, hit);
+    //         }
+    //         // std.debug.print("hit: {any}\n", .{maybe_hit});
+    //     }
+    // }
     std.debug.print("--------------------------------\n", .{});
     // // for (0..10) |_| {
     // //     try writer.print("\n\n", .{});
     // try writer.print("\n\n", .{});
     try renderer.render(allocator, &tree, writer, false);
+
     try writer.print("\n\n", .{});
     // defer tree.deinit();
     // // }

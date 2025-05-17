@@ -770,8 +770,14 @@ pub fn renderInner(self: *Self, writer: std.io.AnyWriter, clear_screen: bool, co
 
         if (comptime full_paint) {
             const _x: i32 = @intCast(self.size.x);
+            _ = _x; // autofix
 
-            try moveCursorBy(buf_writer, -_x, 1);
+            // try moveCursorBy(buf_writer, -_x, 1);
+            current_format = .{};
+            bg = Color.tw.transparent;
+            fg = Color.tw.transparent;
+
+            try buf_writer.writeAll("\x1b[0m|\n");
         }
     }
     if (comptime !full_paint) {

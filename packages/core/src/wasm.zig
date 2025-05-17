@@ -15,7 +15,8 @@ const is_wasm = @import("builtin").target.cpu.arch.isWasm();
 
 pub const std_options: std.Options = .{
     .logFn = wasmLog,
-    .log_level = if (is_debug) .debug else .err,
+    // .log_level = if (is_debug) .debug else .err,
+    .log_level = .err,
 };
 
 extern fn externalLog(message: [*:0]u8) void;
@@ -54,10 +55,12 @@ pub fn main() void {}
 
 pub inline fn wasm_try(T: type, triable: anytype) T {
     return triable catch |e| {
+        logger.err("wasm_try({s})", .{@errorName(e)});
         @panic(@errorName(e));
     };
 }
 
+export const NULL: u32 = std.math.maxInt(u32);
 export fn allocBuffer(size: usize) [*]u8 {
     logger.info("allocBuffer({d})", .{size});
     return wasm_try([]u8, wasm_allocator.alloc(u8, size)).ptr;
@@ -355,6 +358,61 @@ export fn Tree_computeLayout(tree: *Tree, width: [*:0]u8, height: [*:0]u8) void 
         },
     }));
 }
+
+var boundary_point_buffer: [4]u32 = undefined;
+
+export fn Tree_caretPositionFromPoint(tree: *Tree, viewport_width: f32, viewport_height: f32, x: f32, y: f32) [*]u32 {
+    const boundary_point = tree.caretPositionFromPoint(.{ .x = viewport_width, .y = viewport_height }, .{ .x = x, .y = y }) orelse {
+        boundary_point_buffer[0] = NULL;
+        boundary_point_buffer[1] = 0;
+        return &boundary_point_buffer;
+    };
+    boundary_point_buffer[0] = @intCast(boundary_point.node_id);
+    boundary_point_buffer[1] = @intCast(boundary_point.offset);
+    return &boundary_point_buffer;
+}
+
+export fn Tree_createSelection(tree: *Tree, start_node: u32, start_offset: u32, end_node: u32, end_offset: u32) Tree.Selection.Id {
+    return @intCast(wasm_try(Tree.Selection.Id, tree.createSelection(
+        .{ .node_id = start_node, .offset = start_offset },
+        if (end_node == NULL) null else .{ .node_id = end_node, .offset = end_offset },
+    )));
+}
+export fn Selection_getAnchor(tree: *Tree, selection_id: Tree.Selection.Id) [*]u32 {
+    const selection = tree.getSelection(selection_id);
+    const anchor = selection.getAnchor(tree);
+
+    boundary_point_buffer[0] = @intCast(anchor.node_id);
+    boundary_point_buffer[1] = @intCast(anchor.offset);
+    return &boundary_point_buffer;
+}
+
+export fn Tree_removeSelection(tree: *Tree, selection_id: Tree.Selection.Id) void {
+    tree.removeSelection(selection_id);
+}
+export fn Selection_getDirection(tree: *Tree, selection_id: Tree.Selection.Id) i32 {
+    const selection = tree.getSelection(selection_id);
+    return @intFromEnum(selection.direction);
+}
+export fn Selection_getFocus(tree: *Tree, selection_id: Tree.Selection.Id) [*]u32 {
+    const selection = tree.getSelection(selection_id);
+    const focus = selection.getFocus(tree);
+    boundary_point_buffer[0] = @intCast(focus.node_id);
+    boundary_point_buffer[1] = @intCast(focus.offset);
+    return &boundary_point_buffer;
+}
+export fn Selection_setAnchor(tree: *Tree, selection_id: Tree.Selection.Id, node_id: u32, offset: u32) void {
+    const selection = tree.getSelection(selection_id);
+    wasm_try(void, selection.setAnchor(tree, .{ .node_id = node_id, .offset = offset }));
+}
+export fn Selection_setFocus(tree: *Tree, selection_id: Tree.Selection.Id, node_id: u32, offset: u32) void {
+    logger.debug("Selection_setFocus({d}, {d}, {d})", .{ selection_id, node_id, offset });
+    const selection = tree.getSelection(selection_id);
+    selection.setFocus(tree, .{ .node_id = node_id, .offset = offset }) catch |e| {
+        logger.err("Error {s} Selection_setFocus({d}, {d}, {d})", .{ @errorName(e), selection_id, node_id, offset });
+    };
+}
+
 export fn Renderer_renderToStdout(renderer: *Renderer, tree: *Tree, clear_screen: bool) void {
     logger.info("Renderer_renderToStdout({*}, {*}, {any})", .{ renderer, tree, clear_screen });
     wasm_try(void, renderer.render(wasm_allocator, tree, std.io.getStdOut().writer().any(), clear_screen));
@@ -375,8 +433,9 @@ export fn Renderer_getNodeAt(renderer: *Renderer, x: f32, y: f32) u32 {
     return @intCast(renderer.getNodeAt(.{
         .x = x,
         .y = y,
-    }) orelse std.math.maxInt(u32));
+    }) orelse NULL);
 }
+
 export const EventBuffer = [_]u8{1} ** 128;
 
 fn readBufferWithLength(memory: [*]u8) []const u8 {
@@ -440,110 +499,6 @@ export fn ArrayList_dump(list: *std.ArrayList(u8)) void {
 }
 
 const handleRawBuffer = @import("cmd/input.zig").handleRawBuffer;
-// const WasmInputManager = InputManager.InputManager(*WasmManager, WasmManager.emitEventFn, WasmManager.setModeFn);
-// const WasmManager = struct {
-//     buffer: std.ArrayList(u8),
-//     consumed: usize = 0,
-//     mode: InputManager.Mode = .normal,
-//     pub fn init(allocator: std.mem.Allocator) @This() {
-//         return .{
-//             .buffer = std.ArrayList(u8).init(allocator),
-//         };
-//     }
-//     pub fn deinit(self: *@This()) void {
-//         self.buffer.deinit();
-//     }
-
-//     pub inline fn manager(self: *@This()) WasmInputManager {
-//         return .{
-//             .context = self,
-//             .mode = self.mode,
-//         };
-//     }
-
-//     // Events encoding
-//     // key event
-//     // action: 0 = press, 1 = release, 2 = repeat
-//     // [1, eventId, codepoint: u32, base_codepoint: u32, action: u32, modifiers: u32, position: u32, length: u32]
-//     // paste
-//     // kind: 0 = start, end = 1, chunk = 2, all: 3
-//     // [2, eventId, kind: u32, body_position: u32, body_length: u32, position: u32, length: u32]
-//     // focus
-//     // 0 = unfocused, 1 = focused
-//     // [3, eventId, focused: u32]
-//     // cursor report normal mode
-//     // left_press = 0, middle_press = 1, right_press = 2, release = 3, wheel_forward = 4, wheel_back = 5, wheel_tilt_left = 6, wheel_tilt_right = 7
-//     // [4, eventId,  x: u32, y: u32, action: u32]
-//     // mouse report extended mode
-//     // button: 0 = left, 1 = middle, 2 = right, 3 = wheel, 4 = button8, 5 = button9, 6 = button10, 7 = button11, 8 = none
-//     // action: 0 = press, 1 = release, 2 = motion, 3 = wheel_up, 4 = wheel_down, 5 = wheel_left, 6 = wheel_right
-//     // [5, eventId, button: u32, action: u32, x: u32, y: u32]
-
-//     const external = if (!builtin.is_test) struct {
-//         extern fn emitEvent(data: [*]const u32) void;
-//     } else struct {
-//         pub fn emitEvent(_: [*]const u32) void {}
-//     };
-//     var event_buffer: [8]u32 = undefined;
-//     pub fn setModeFn(self: *WasmManager, mode: InputManager.Mode) void {
-//         self.mode = mode;
-//     }
-
-//     pub fn emitEventFn(ctx: *WasmManager, event: InputManager.Event) void {
-//         _ = ctx; // autofix
-//         switch (event.data) {
-//             .key => |key| {
-//                 const action: u32 = @intCast(@intFromEnum(key.action));
-//                 event_buffer[0] = 1;
-//                 event_buffer[1] = 0; // reserve for future event id
-//                 event_buffer[2] = key.codepoint;
-//                 event_buffer[3] = key.base_codepoint;
-//                 event_buffer[4] = action;
-//                 event_buffer[5] = event.modifiers;
-//                 external.emitEvent((&event_buffer).ptr);
-//             },
-//             .paste_chunk => |paste| {
-//                 const kind: u32 = @intCast(@intFromEnum(paste.kind));
-//                 event_buffer[0] = 2;
-//                 event_buffer[1] = 0; // reserve for future event id
-//                 event_buffer[2] = kind;
-//                 event_buffer[3] = @intCast(@intFromPtr(paste.chunk.ptr));
-//                 event_buffer[4] = @intCast(paste.chunk.len);
-//                 external.emitEvent((&event_buffer).ptr);
-//             },
-//             else => {},
-//             // .paste =>|paste| {
-//             //     const data = [_]u32{ 2, event.paste.kind, event.paste.body_position, event.paste.body_length, event.paste.position, event.paste.length };
-//             //     emitEvent(&data);
-//             // },
-//         }
-
-//         // ctx.consumed += handleRawBuffer(ctx, ctx.buffer.items[ctx.consumed..]);
-//     }
-// };
-// export fn InputManager_init() *WasmManager {
-//     const input_manager = wasm_try(*WasmManager, wasm_allocator.create(WasmManager));
-//     input_manager.* = WasmManager.init(wasm_allocator);
-//     return input_manager;
-// }
-
-// export fn InputManager_deinit(input_manager: *WasmManager) void {
-//     input_manager.deinit();
-//     wasm_allocator.destroy(input_manager);
-// }
-
-// export fn InputManager_consumeEvents(input_manager: *WasmManager, array_buffer: *std.ArrayList(u8), force: bool) u32 {
-//     var manager = input_manager.manager().any();
-//     const original_mode = manager._mode;
-//     if (force) {
-//         manager.setMode(.force);
-//     }
-//     const consumed = handleRawBuffer(&manager, array_buffer.items, 0);
-//     if (force) {
-//         manager.setMode(original_mode);
-//     }
-//     return @intCast(consumed);
-// }
 
 export fn detectLeaks() bool {
     if (builtin.mode == .Debug) {
@@ -617,14 +572,40 @@ test "leak" {
     defer _ = gpa.detectLeaks();
     const tree = Tree_init();
     defer Tree_deinit(tree);
-    const node = Tree_createTextNode(tree, allocTestString("hello"));
-    inline for (std.meta.fields(Cursor)) |field| {
-        Tree_setStyle(tree, node, allocTestString("background-color: blue;cursor: " ++ field.name ++ ";"));
-        Tree_computeLayout(tree, allocTestString("200"), allocTestString("200"));
-    }
+    const root = Tree_createNode(tree, allocTestString(
+        \\height: 3;
+        \\display: flex;
+        \\justify-content: center;
+        \\align-items: center;
+        \\background-color: red;
+    ));
+    const node = Tree_createTextNode(tree, allocTestString("Lorem ipsum dolor sit amet"));
+    _ = Tree_appendChild(tree, root, node);
+    // inline for (std.meta.fields(Cursor)) |field| {
+    // Tree_setStyle(tree, node, allocTestString("background-color: blue;cursor: " ++ field.name ++ ";"));
+    Tree_computeLayout(
+        tree,
+        allocTestString("100"),
+        allocTestString("3"),
+    );
+    const selection = Tree_createSelection(tree, node, 5, node, 10);
+    _ = selection; // autofix
+    const hit_test = tree.caretPositionFromPoint(
+        .{ .x = 100, .y = 3 },
+        .{ .x = 5, .y = 1 },
+    );
+    std.debug.print("hit_test: {any}\n", .{hit_test});
+    // Selection_setFocus(tree, selection, node, 1);
+    // Tree_dump(tree);
+    // const renderer = Renderer_init();
+    // defer Renderer_deinit(renderer);
+    // var writer = std.io.fixedBufferStream("");
+    // try renderer.render(wasm_allocator, tree, std.io.getStdErr().writer().any(), false);
+    // }
 }
 
 test {
     _ = @import("./layout/tree/Range.zig");
     _ = @import("./uni/GraphemeBreak.zig");
+    _ = @import("./layout/tree/NodeIterator.zig");
 }

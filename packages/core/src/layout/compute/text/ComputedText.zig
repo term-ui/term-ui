@@ -15,7 +15,7 @@ pub fn getAllocator(self: *Self) std.mem.Allocator {
     return self.arena.allocator();
 }
 
-const LineBox = struct {
+pub const LineBox = struct {
     parts: Array(TextPart) = .{},
     content_width: f32 = 0,
     allocator: std.mem.Allocator,
@@ -51,9 +51,7 @@ const LineBox = struct {
 pub fn length(self: Self) usize {
     return self.data.items.len;
 }
-// pub fn appendText(self: *Self, text: []const u8) !void {
-//     try self.data.appendSlice(self.arena.allocator(), text);
-// }
+
 pub fn init(allocator: std.mem.Allocator) !Self {
     return .{
         .arena = std.heap.ArenaAllocator.init(allocator),

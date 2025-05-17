@@ -247,6 +247,7 @@ fn computeInner(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree,
         if (child_style.display.outside == .none) {
             tree.setUnroundedLayout(child_id, Layout{
                 .order = @intCast(order),
+                .margin = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
             });
             _ = try perform_child_layout(
                 allocator,
@@ -606,6 +607,7 @@ fn performFinalLayoutOnInFlowChildren(
             .padding = item.padding,
             .border = item.border,
             .content_size = content_size,
+            .margin = resolved_margin,
         };
 
         tree.setUnroundedLayout(item.node_id, layout);
@@ -830,6 +832,7 @@ pub fn performAbsoluteLayoutOnAbsoluteChildren(
             .location = location,
             .padding = padding,
             .border = border,
+            .margin = resolved_margin,
         });
 
         absolute_content_size = absolute_content_size.max(compute_content_size_contribution(

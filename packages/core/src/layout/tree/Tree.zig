@@ -19,10 +19,14 @@ const InputManager = @import("../../cmd/input/manager.zig").AnyInputManager;
 const Event = @import("../../cmd/input/manager.zig").Event;
 const String = @import("String.zig");
 const Range = @import("Range.zig");
-const BoundaryPoint = @import("BoundaryPoint.zig");
+pub const BoundaryPoint = @import("BoundaryPoint.zig");
 const NodeIterator = @import("NodeIterator.zig");
-const Selection = @import("Selection.zig");
+pub const Selection = @import("Selection.zig");
 const traversal = @import("./traversal.zig");
+const Canvas = @import("../../renderer/Canvas.zig");
+const GraphemeIterator = @import("../../uni/GraphemeBreak.zig").Iterator;
+const visible = @import("../../uni/string-width.zig").visible;
+
 node_map: std.AutoHashMapUnmanaged(Node.NodeId, Node) = .{},
 allocator: std.mem.Allocator,
 style_manager: StyleManager,
@@ -57,38 +61,40 @@ pub fn getFirstSelection(self: *Self) ?*Selection {
     return if (it.next()) |selection| selection else null;
 }
 pub fn getSelection(self: *Self, selection_id: Selection.Id) *Selection {
-    return self.selections.getPtr(selection_id);
+    return self.selections.getPtr(selection_id) orelse std.debug.panic("Selection {d} not found\n", .{selection_id});
 }
 pub fn getRange(self: *Self, range_id: Range.Id) *Range {
     return self.live_ranges.getPtr(range_id);
 }
 
 pub fn createSelection(self: *Self, start: BoundaryPoint, end: ?BoundaryPoint) !Selection.Id {
-    const range_id = try self.createLiveRange(.{
+    const selection_id = try self.createLiveRange(.{
         .node_id = start.node_id,
         .offset = start.offset,
     }, .{
         .node_id = start.node_id,
         .offset = start.offset,
     });
-    // if (end) |end_point| {
-    try self.selections.put(self.allocator, start.node_id, Selection{
-        .range_id = range_id,
+    // if (end) |ennode_idd_point| {
+
+    try self.selections.put(self.allocator, selection_id, Selection{
+        .range_id = selection_id,
         .direction = .none,
     });
 
-    try self.selections.getPtr(start.node_id).?.setRange(self, start, end orelse start);
+    try self.selections.getPtr(selection_id).?.setRange(self, start, end orelse start);
     // } else
-    return range_id;
+    return selection_id;
 }
-pub fn createNodeIterator(self: *Self, root: Node.NodeId, whatToShow: u8) NodeIterator {
+pub fn removeSelection(self: *Self, selection_id: Selection.Id) void {
+    _ = self.selections.remove(selection_id);
+    _ = self.live_ranges.remove(selection_id);
+}
+pub fn createNodeIterator(self: *Self, root: Node.NodeId) NodeIterator {
     return NodeIterator{
         .reference_node = root,
-        // .allocator = self.allocator,
-        .whatToShow = whatToShow,
-        .tree = self,
 
-        // .filter = filter,
+        .tree = self,
     };
 }
 pub fn enableInputManager(self: *Self) !void {
@@ -119,14 +125,14 @@ pub fn iterLiveRanges(self: *Self) std.AutoHashMapUnmanaged(Range.Id, Range).Val
     return self.live_ranges.valueIterator();
 }
 pub fn getLiveRange(self: *Self, id: Range.Id) *Range {
-    return self.live_ranges.getPtr(id).?;
+    return self.live_ranges.getPtr(id) orelse std.debug.panic("Range {d} not found\n", .{id});
 }
 fn emitEventFn(context: *anyopaque, event: Event) void {
     _ = event; // autofix
     _ = context; // autofix
 }
 pub inline fn getNode(self: *Self, id: Node.NodeId) *Node {
-    return self.node_map.getPtr(id).?;
+    return self.node_map.getPtr(id) orelse std.debug.panic("Node {d} not found\n", .{id});
 }
 pub fn getNodeKind(self: *Self, id: Node.NodeId) Node.NodeKind {
     return self.getNode(id).kind;
@@ -194,9 +200,14 @@ pub fn setStyle(self: *Self, id: Node.NodeId, style: Style) void {
 }
 pub fn setText(self: *Self, id: Node.NodeId, text: []const u8) !void {
     var node = self.getNode(id);
-    node.text.clearRetainingCapacity();
-    try node.text.append(self.allocator, text);
-    self.markDirty(id);
+
+    try node.text.replace(self.allocator, 0, node.text.length(), text);
+    var dirty_node = id;
+    while (self.getStyle(dirty_node).display.isInlineFlow() == false) {
+        self.markDirty(dirty_node);
+        dirty_node = self.getParent(dirty_node) orelse break;
+    }
+    self.markDirty(dirty_node);
 }
 
 pub fn setParent(self: *Self, id: Node.NodeId, parent: ?Node.NodeId) !void {
@@ -1752,9 +1763,148 @@ pub fn dumpNodes(tree: *Self, node_id: Node.NodeId, writer: std.io.AnyWriter, ma
     }
 }
 
+pub fn caretPositionFromPoint(self: *Self, viewport_size: Point(f32), position: Point(f32)) ?BoundaryPoint {
+    const maybe_hit = hitTest(self, viewport_size, position, .{});
+    if (maybe_hit) |hit| {
+        // TODO: for now, we only return if the caret is exactly on a text node
+        // we will handle a more flexible model once we introduce the render tree
+
+        if (self.getNode(hit.node_id).kind == .text) {
+            return hit;
+        }
+    }
+    return null;
+}
+
 pub fn expectNodes(tree: *Self, node_id: Node.NodeId, expected: []const u8, range: ?Range) !void {
     var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
     try tree.dumpNodes(node_id, buffer.writer().any(), range, .{});
     try std.testing.expectEqualStrings(expected, buffer.items);
+}
+
+const HitTestOptions = struct {
+    whatToShow: u8 = 0,
+    include_margin: bool = true,
+};
+pub fn hitTest(self: *Self, viewport_size: Point(f32), position: Point(f32), comptime options: HitTestOptions) ?BoundaryPoint {
+    return hitTestInner(self, viewport_size, .{ .pos = .{ .x = 0, .y = 0 }, .size = viewport_size }, 0, .{ .x = 0, .y = 0 }, position, options);
+}
+
+fn hitTestInner(
+    self: *Self,
+    viewport_size: Point(f32),
+    mask: Canvas.Rect,
+    node_id: Node.NodeId,
+    offset: Point(f32),
+    hit_position: Point(f32),
+    comptime options: HitTestOptions,
+) ?BoundaryPoint {
+    const layout = self.getLayout(node_id);
+    var absolute_position = layout.location.add(offset);
+    const style = self.getComputedStyle(node_id);
+    const node = self.getNode(node_id);
+    const is_scrollable = style.overflow.y == .scroll or style.overflow.x == .scroll or style.overflow.y == .hidden or style.overflow.x == .hidden;
+    if (is_scrollable) {
+        absolute_position = absolute_position.sub(node.scroll_offset);
+    }
+
+    var node_rect = Canvas.Rect{ .pos = absolute_position, .size = layout.size };
+    if (comptime options.include_margin) {
+        node_rect.pos = node_rect.pos.sub(.{ .x = layout.margin.left, .y = layout.margin.top });
+        node_rect.size = node_rect.size.sub(.{ .x = layout.margin.left + layout.margin.right, .y = layout.margin.top + layout.margin.bottom });
+    }
+
+    node_rect = node_rect.intersect(mask);
+
+    var hit: ?BoundaryPoint = if (node_rect.isPointWithin(f32, hit_position)) .{ .node_id = node_id, .offset = 0 } else null;
+
+    const is_text_root = style.display.isInlineFlow();
+    if (is_text_root) {
+        const computed_text = self.getComputedText(node_id) orelse return null;
+        for (computed_text.lines.items) |line| {
+            const line_position = absolute_position.add(line.position);
+            const line_rect = Canvas.Rect{ .pos = line_position, .size = line.size };
+
+            if (!line_rect.isPointWithin(f32, hit_position)) {
+                if (hit_position.y > line_rect.pos.y) {
+                    if (line.parts.getLastOrNull()) |last_part| {
+                        hit = .{ .node_id = last_part.node_id, .offset = @intCast(last_part.node_offset + last_part.length) };
+                    } else {
+                        hit = .{ .node_id = node_id, .offset = 0 };
+                    }
+                } else {
+                    break;
+                }
+
+                continue;
+            }
+
+            if (line.parts.items.len == 0) {
+                return .{ .node_id = node_id, .offset = 0 };
+            }
+            const first_part: ComputedText.TextPart = line.parts.items[0];
+
+            const first_part_pos = line_position.add(first_part.position);
+            if (hit_position.x < first_part_pos.x) {
+                return .{ .node_id = first_part.node_id, .offset = @intCast(first_part.node_offset) };
+            }
+            const last_part: ComputedText.TextPart = line.parts.items[line.parts.items.len - 1];
+            const last_part_pos = line_position.add(last_part.position);
+            const last_part_end = last_part_pos.add(.{ .x = last_part.size.x, .y = 0 });
+            if (hit_position.x >= last_part_end.x) {
+                return .{ .node_id = last_part.node_id, .offset = @intCast(last_part.node_offset + last_part.length) };
+            }
+
+            for (line.parts.items) |part| {
+                const part_rect = Canvas.Rect{ .pos = line_position.add(part.position), .size = .{
+                    .x = part.size.x,
+                    .y = line.size.y,
+                } };
+
+                if (part_rect.isPointWithin(f32, hit_position)) {
+                    hit = .{ .node_id = part.node_id, .offset = @intCast(part.node_offset) };
+                    var x: f32 = part_rect.pos.x;
+
+                    if (x >= hit_position.x) {
+                        return .{ .node_id = part.node_id, .offset = @intCast(part.node_offset) };
+                    }
+
+                    const str = computed_text.slice(part.start, part.start + part.length);
+                    var grapheme_iterator = GraphemeIterator.init(str);
+
+                    while (grapheme_iterator.next()) |grapheme| {
+                        if (x >= hit_position.x) {
+                            return .{ .node_id = part.node_id, .offset = @intCast(part.node_offset + grapheme.offset) };
+                        }
+                        x += @floatFromInt(visible.width.exclude_ansi_colors.utf8(grapheme.bytes(str)));
+                    }
+
+                    return .{ .node_id = part.node_id, .offset = @intCast(part.node_offset + part.length) };
+                }
+            }
+        }
+        return hit;
+    }
+
+    const children = self.getChildren(node_id);
+
+    for (children.items) |child_id| {
+        const child_hit = hitTestInner(
+            self,
+            viewport_size,
+            mask,
+            child_id,
+            absolute_position,
+            hit_position,
+            options,
+        );
+        hit = child_hit orelse hit;
+    }
+
+    return hit;
+}
+fn getBoundaryEnd(tree: *Self, node_id: Node.NodeId) BoundaryPoint {
+    const length = tree.getNode(node_id).length();
+    return .{ .node_id = node_id, .offset = length };
 }

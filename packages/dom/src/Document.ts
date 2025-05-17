@@ -20,6 +20,7 @@ import type {
   RenderingSize,
   Size,
 } from "./types";
+import { Selection } from "./Selection";
 const resolvePercentage = (
   size:
     | number
@@ -61,6 +62,7 @@ export class Document {
   enableInputs: boolean;
   exitOnCtrlC: boolean;
   enableAlternateScreen: boolean;
+  selection: Selection | null = null;
   private nodes: Map<
     number,
     Element | TextElement
@@ -507,5 +509,45 @@ export class Document {
   };
   requestPaint = () => {
     this.onPaintRequest();
+  };
+
+  createSelection = (start: {
+    node: number;
+    offset: number;
+  },
+    end?: {
+      node: number;
+      offset: number;
+    },
+  ) => {
+    this.removeSelection();
+    const ptr = this.module.Tree_createSelection(
+      this.tree.ptr,
+      start.node,
+      start.offset,
+      end?.node ?? start.node,
+      end?.offset ?? start.offset,
+    );
+    const selection = new Selection(this, ptr);
+    this.selection = selection;
+    return selection;
+  };
+  removeSelection = () => {
+    if (!this.selection) return;
+    this.module.Tree_removeSelection(
+      this.tree.ptr,
+      this.selection.id,
+    );
+    this.selection = null;
+  };
+
+  caretPositionFromPoint = (x: number, y: number) => {
+    return this.module.Tree_caretPositionFromPoint(
+      this.tree.ptr,
+      this.viewportSize.width,
+      this.viewportSize.height,
+      x,
+      y,
+    );
   };
 }

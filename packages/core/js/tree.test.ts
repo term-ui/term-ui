@@ -18,7 +18,8 @@ const mod = await initFromFile(
   join(dirpath, "../zig-out/bin/core-debug.wasm"),
   {
     // writeStream: process.stdout,
-    logFn: () => {},
+    // logFn: () => {},
+    logFn: console.log,
   },
 );
 
@@ -80,7 +81,6 @@ describe("Tree hierarchy operations", () => {
     mod.Tree_appendChild(tree, parent, child1);
     mod.Tree_insertBefore(
       tree,
-      parent,
       child2,
       child1,
     );
@@ -1454,5 +1454,23 @@ describe("Node attachment and detachment", () => {
     expect(
       mod.Tree_getNodeContains(tree, root, leaf),
     ).toBe(true); // Still attached to root through new path
+  });
+
+
+});
+
+describe.only("Selection", () => {
+  initTreeHook();
+  it("should properly track selection", () => {
+    // const root = mod.Tree_createNode(tree, "");
+    const textNode = mod.Tree_createTextNode(tree, "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.");
+    console.log("tree_id", tree);
+    // mod.Tree_appendChild(tree, root, textNode);
+    mod.Tree_computeLayout(tree, "100", "100");
+    const selection = mod.Tree_createSelection(tree, textNode, 0, textNode, 5);
+    // mod.Tree_dump(tree);
+    mod.Selection_setFocus(tree, selection, textNode, 10);
+    // // expect(mod.Tree_getSelectionStart(tree, selection)).toBe(0);
+    // expect(mod.Tree_getSelectionEnd(tree, selection)).toBe(5);
   });
 });

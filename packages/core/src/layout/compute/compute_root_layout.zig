@@ -45,5 +45,6 @@ pub fn compute_root_layout(allocator: std.mem.Allocator, tree: *Tree, available_
         .scrollbar_size = scrollbar_size,
         .padding = padding,
         .border = border,
+        .margin = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
     });
 }

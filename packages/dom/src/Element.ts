@@ -170,7 +170,6 @@ export class Element extends Node {
     );
     this.tree.module.Tree_insertBefore(
       this.tree.ptr,
-      this.id,
       child.id,
       before.id,
     );
