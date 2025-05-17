@@ -350,10 +350,7 @@ pub fn extendBy(
     ghost_horizontal_position: ?f32,
     root_node_id: Node.NodeId,
 ) !void {
-    _ = self; // autofix
-    _ = tree; // autofix
-    _ = granularity; // autofix
-    _ = direction; // autofix
-    _ = ghost_horizontal_position; // autofix
-    _ = root_node_id; // autofix
+    const current_focus = self.getFocus(tree);
+    const new_focus = getBoundaryAt(tree, current_focus, granularity, direction, ghost_horizontal_position) orelse return;
+    try self.setFocus(tree, new_focus);
 }
