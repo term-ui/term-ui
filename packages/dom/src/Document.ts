@@ -10,6 +10,7 @@ import type { WriteStream } from "@term-ui/shared/types";
 import { Element } from "./Element";
 import {
   type InputEvent,
+  type KeyEvent,
   InputManager,
 } from "./InputManager";
 import { Renderer } from "./Renderer";
@@ -178,11 +179,15 @@ export class Document {
     if (event.kind === "mouse") {
       this.emitCursorEvents(event);
     }
+    if (event.kind === "key") {
+      this.emitKeyEvents(event);
+    }
     if (this.paintRequested) {
       this.paintRequested = false;
       this.paint();
     }
   };
+  
 
   private emitCursorEvents = (
     event: Extract<InputEvent, { kind: "mouse" }>,
@@ -549,5 +554,133 @@ export class Document {
       x,
       y,
     );
+  };
+
+  private emitKeyEvents = (
+    event: Extract<InputEvent, { kind: "key" }>
+  ) => {
+    // Always use the root element since we don't have focused elements yet
+    const targetElement = this.root;
+    
+    let defaultPrevented = false;
+    const preventDefault = () => {
+      defaultPrevented = true;
+    };
+    
+    // Common properties for keyboard events
+    const commonProps = {
+      target: targetElement,
+      document: this,
+      key: event.key,
+      codepoint: event.codepoint,
+      text: event.text,
+      shift: event.shift,
+      ctrl: event.ctrl,
+      alt: event.alt,
+      super: event.super,
+      meta: event.meta,
+      preventDefault
+    };
+    
+    // Handle keydown - for both initial press and repeats
+    if (event.action === "press" || event.action === "repeat") {
+      targetElement.emitEvent({
+        kind: "keydown",
+        ...commonProps,
+        // Set repeat flag to true for repeat events, false for initial press
+        repeat: event.action === "repeat"
+      });
+      
+      // Emit keypress only for printable characters on any press or repeat
+      if (event.text) {
+        targetElement.emitEvent({
+          kind: "keypress",
+          ...commonProps,
+          repeat: event.action === "repeat"
+        });
+      }
+    } 
+    // Handle keyup
+    else if (event.action === "release") {
+      targetElement.emitEvent({
+        kind: "keyup",
+        ...commonProps,
+        repeat: false // keyup is never a repeat
+      });
+    }
+    
+    // If event wasn't prevented, handle default behavior
+    if (!defaultPrevented) {
+      this.handleDefaultKeyBehavior(event, targetElement);
+    }
+  };
+  
+  private handleDefaultKeyBehavior = (
+    event: Extract<InputEvent, { kind: "key" }>,
+    element: Element
+  ) => {
+    // Only handle on initial press (not repeat or release)
+    if (event.action !== "press") return;
+    
+    // Handle selection movement with Shift+Arrow keys
+    if (event.shift && (
+        event.key === "up" || event.key === "down" || 
+        event.key === "left" || event.key === "right")) {
+      
+      // Create selection if it doesn't exist
+      if (!this.selection) {
+        // Get caret position from current position or use the first position
+        const caretPosition = this.caretPositionFromPoint(0, 0);
+        if (caretPosition) {
+          this.createSelection({
+            node: caretPosition.node,
+            offset: caretPosition.offset
+          });
+        }
+      }
+      
+      // If we have a selection, extend it in the direction of the arrow key
+      if (this.selection) {
+        // Determine direction (forward or backward)
+        const direction: "forward" | "backward" = 
+          (event.key === "down" || event.key === "right") 
+            ? "forward" 
+            : "backward";
+        
+        // Use line granularity for up/down, character granularity for left/right
+        const granularity: "character" | "line" = 
+          (event.key === "up" || event.key === "down") 
+            ? "line" 
+            : "character";
+        
+        // Extend the selection with the appropriate granularity and direction
+        this.selection.extendBy(granularity, direction);
+        this.requestPaint();
+        return;
+      }
+    }
+    
+    // Basic arrow key navigation (when shift is not pressed)
+    if (!event.shift && (
+        event.key === "up" || event.key === "down" || 
+        event.key === "left" || event.key === "right")) {
+      
+      // Clear any existing selection when navigating without shift
+      if (this.selection) {
+        this.removeSelection();
+      }
+      
+      // Handle arrow key navigation
+      if (event.key === "up") {
+        element.scrollTop -= 1;
+      } else if (event.key === "down") {
+        element.scrollTop += 1; 
+      } else if (event.key === "left") {
+        element.scrollLeft -= 1;
+      } else if (event.key === "right") {
+        element.scrollLeft += 1;
+      }
+      this.requestPaint();
+    }
   };
 }

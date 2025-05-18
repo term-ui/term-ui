@@ -280,3 +280,5 @@ export const init: typeof _init = memoize(_init);
 export type Module = Awaited<
   ReturnType<typeof _init>
 >;
+
+export * from './constants.js';

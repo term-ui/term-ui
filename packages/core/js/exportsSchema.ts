@@ -492,6 +492,22 @@ export const getSchema = (
       catchError("Selection_getDirection"),
     ),
 
+    Selection_extendBy: pipe(
+      function_(),
+      args(
+        tuple([
+          number(),
+          number(),
+          number(),
+          number(),
+          optional(number(), NULL),
+          optional(number(), NULL),
+        ]),
+      ),
+      returns(void_()),
+      catchError("Selection_extendBy"),
+    ),
+
     Renderer_init: pipe(
       function_(),
       args(tuple([])),

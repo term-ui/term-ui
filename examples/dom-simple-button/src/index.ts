@@ -1,12 +1,19 @@
-import { initFromFile, distDir } from "@term-ui/core/node";
+import {
+  initFromFile,
+  distDir,
+} from "@term-ui/core/node";
 import { Document } from "@term-ui/dom";
 import path from "node:path";
-const module = await initFromFile(path.join(distDir, "core-debug.wasm"), {
-  logFn: (log) => {
-    // if (log.level === "error") {
-    // console.error(log);
+const module = await initFromFile(
+  // path.join(distDir, "core-debug.wasm"), //
+  undefined,
+  {
+    logFn: (log) => {
+      // if (log.level === "error") {
+      // console.error(log);
+    },
   },
-});
+);
 
 const document = new Document(module, {
   size: {
@@ -33,9 +40,14 @@ const text = document.createTextNode(
   "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
 );
 document.root.appendChild(text);
+const text2 = document.createTextNode(
+  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+);
+document.root.appendChild(text2);
 const bpNode = document.createTextNode("[]");
 
 document.root.appendChild(bpNode);
+
 // bpNode.setStyle(`
 
 //   `);
@@ -56,6 +68,10 @@ button.addEventListener("click", () => {
   clearTimeout(timeout);
   button.setText("Thank you! 🎉");
   document.render(true);
+  document.selection?.extendBy(
+    "character",
+    "forward",
+  );
   timeout = setTimeout(() => {
     button.setText("Click me");
     document.render(true);
@@ -124,7 +140,6 @@ document.inputManager?.subscribe((e) => {
     selection.setFocus(bp.node, bp.offset);
     updateBpNode();
     // updateBpNode();
-
   }
   if (e.action === "release") {
     pressed = false;

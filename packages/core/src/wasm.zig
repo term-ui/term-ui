@@ -413,6 +413,28 @@ export fn Selection_setFocus(tree: *Tree, selection_id: Tree.Selection.Id, node_
     };
 }
 
+export fn Selection_extendBy(
+    tree: *Tree,
+    selection_id: Tree.Selection.Id,
+    granularity: u8,
+    direction: u8,
+    ghost_horizontal_position: f32,
+    root_node_id: u32,
+) void {
+    logger.debug("Selection_extendBy({d}, {d}, {d}, {d}, {d})", .{ selection_id, granularity, direction, ghost_horizontal_position, root_node_id });
+    const selection = tree.getSelection(selection_id);
+    // selection.extendBy(tree, @as(Tree.Selection.ExtendGranularity, @enumFromInt(granularity)), @as(Tree.Selection.ExtendDirection, @enumFromInt(direction)), if (has_ghost_position) ghost_horizontal_position else null, root_node_id) catch |e| {
+    //     logger.err("Error {s} Selection_extendBy({d}, {d}, {d}, {d}, {d})", .{ @errorName(e), selection_id, granularity, direction, ghost_horizontal_position, root_node_id });
+    // };
+    wasm_try(void, selection.extendBy(
+        tree,
+        @as(Tree.Selection.ExtendGranularity, @enumFromInt(granularity)),
+        @as(Tree.Selection.ExtendDirection, @enumFromInt(direction)),
+        if (ghost_horizontal_position == NULL) null else ghost_horizontal_position,
+        root_node_id,
+    ));
+}
+
 export fn Renderer_renderToStdout(renderer: *Renderer, tree: *Tree, clear_screen: bool) void {
     logger.info("Renderer_renderToStdout({*}, {*}, {any})", .{ renderer, tree, clear_screen });
     wasm_try(void, renderer.render(wasm_allocator, tree, std.io.getStdOut().writer().any(), clear_screen));

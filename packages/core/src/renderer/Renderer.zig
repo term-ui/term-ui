@@ -309,7 +309,14 @@ test "rendertree" {
     const focus = BoundaryPoint{ .node_id = 5, .offset = 4 };
     const selection_id = try tree.createSelection(focus, null);
     var selection = tree.getSelection(selection_id);
-    const bpAbove = Selection.getBoundaryAt(&tree, focus, .documentboundary, .backward, null);
+    const bpAbove = Selection.getBoundaryAt(
+        &tree,
+        focus,
+        0,
+        .documentboundary,
+        .backward,
+        null,
+    );
     // bpAbove = Selection.getBoundaryAt(&tree, focus, .line, .backward, null);
     std.debug.print("new focus: {any}\n", .{bpAbove});
     if (bpAbove) |bp| {

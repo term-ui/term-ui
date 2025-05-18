@@ -7,9 +7,14 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+
     "./node": {
       "import": "./dist/node.js",
       "types": "./dist/node.d.ts"
+    },
+    "./constants": {
+      "import": "./dist/constants.js",
+      "types": "./dist/constants.d.ts"
     },
     "./core.wasm": "./dist/core.wasm",
     "./core-debug.wasm": "./dist/core-debug.wasm"

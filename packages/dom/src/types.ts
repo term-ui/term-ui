@@ -4,6 +4,7 @@ import type {
 } from "@term-ui/shared/types";
 import type { Document } from "./Document";
 import type { Element } from "./Element";
+import type { KeyName } from "./InputManager";
 
 export type Size<T = number> = {
   width: T;
@@ -16,7 +17,10 @@ export type DomEvent =
   | MouseDownEvent
   | MouseUpEvent
   | MouseClickEvent
-  | ScrollEvent;
+  | ScrollEvent
+  | KeydownEvent
+  | KeyupEvent
+  | KeypressEvent;
 export type MouseEnterEvent = {
   kind: "mouse-enter";
   target: Element;
@@ -62,6 +66,33 @@ export type ScrollEvent = {
   deltaX: number;
   deltaY: number;
   preventDefault: () => void;
+};
+
+export type BaseKeyEvent = {
+  target: Element;
+  document: Document;
+  key?: KeyName;
+  codepoint: number;
+  text: string;
+  shift: boolean;
+  ctrl: boolean;
+  alt: boolean;
+  super: boolean;
+  meta: boolean;
+  repeat?: boolean;
+  preventDefault: () => void;
+};
+
+export type KeydownEvent = BaseKeyEvent & {
+  kind: "keydown";
+};
+
+export type KeyupEvent = BaseKeyEvent & {
+  kind: "keyup";
+};
+
+export type KeypressEvent = BaseKeyEvent & {
+  kind: "keypress";
 };
 
 export type RenderingSize = Size<
