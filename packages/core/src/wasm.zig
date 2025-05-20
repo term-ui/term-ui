@@ -435,6 +435,15 @@ export fn Selection_extendBy(
     ));
 }
 
+export fn Selection_getHorizontalOffset(
+    tree: *Tree,
+    node_id: u32,
+    offset: u32,
+) f32 {
+    const bp = BoundaryPoint{ .node_id = node_id, .offset = offset };
+    return Tree.Selection.getHorizontalOffset(tree, bp) orelse 0;
+}
+
 export fn Renderer_renderToStdout(renderer: *Renderer, tree: *Tree, clear_screen: bool) void {
     logger.info("Renderer_renderToStdout({*}, {*}, {any})", .{ renderer, tree, clear_screen });
     wasm_try(void, renderer.render(wasm_allocator, tree, std.io.getStdOut().writer().any(), clear_screen));

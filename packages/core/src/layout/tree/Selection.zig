@@ -322,6 +322,24 @@ fn getPreviousLineBoxPart(
     return null;
 }
 
+pub fn getHorizontalOffset(
+    tree: *Tree,
+    bp: BoundaryPoint,
+) ?f32 {
+    const indexes = findLineBox(tree, bp) orelse return null;
+    const computed_text = tree.getComputedText(indexes.root_node_id) orelse return null;
+    const line = computed_text.lines.items[indexes.line_index];
+    const part = line.parts.items[indexes.part_index];
+    var pos = line.position.x;
+    for (line.parts.items, 0..) |current, i| {
+        if (i == indexes.part_index) break;
+        pos += current.size.x;
+    }
+    const slice = computed_text.slice(part.node_offset, bp.offset);
+    pos += @floatFromInt(measureText(slice));
+    return pos;
+}
+
 pub fn getBoundaryAt(
     tree: *Tree,
     focus: BoundaryPoint,
@@ -458,17 +476,8 @@ pub fn getBoundaryAt(
         return BoundaryPoint{ .node_id = first_part.node_id, .offset = @intCast(first_part.node_offset) };
     }
     if (granularity == .line) {
-        var offset_horizontal_position = line.position.x;
-        if (ghost_horizontal_position) |pos| {
-            offset_horizontal_position = pos;
-        } else {
-            for (line.parts.items, 0..) |current, i| {
-                if (i == line_box_indexes.part_index) break;
-                offset_horizontal_position += current.size.x;
-            }
-            const part_slice = computed_text.slice(part.node_offset, focus.offset);
-            offset_horizontal_position += @floatFromInt(measureText(part_slice));
-        }
+        const offset_horizontal_position = ghost_horizontal_position orelse
+            (getHorizontalOffset(tree, focus) orelse line.position.x);
 
         // const maybe_target_line = findInlineLineBox(tree, focus.node_id, root_node_id, direction);
         const maybe_target_line = switch (direction) {
