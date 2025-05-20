@@ -52,8 +52,8 @@ export class Selection {
     rootNodeId?: number,
   ) {
     if (granularity === "line") {
-      if (this.ghostPosition === null) {
-        const focus = this.getFocus();
+      const focus = this.getFocus();
+      if (this.ghostPosition === null && focus !== null) {
         this.ghostPosition =
           this.document.module.Selection_getHorizontalOffset(
             this.document.tree.ptr,

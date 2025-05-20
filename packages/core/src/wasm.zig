@@ -8,7 +8,7 @@ const TermInfo = @import("cmd/terminfo/main.zig").TermInfo;
 const InputManager = @import("cmd/input/manager.zig");
 const builtin = @import("builtin");
 const logger = std.log.scoped(.wasm);
-
+const computeLayout = @import("layout/compute/compute_layout.zig").computeLayout;
 const is_debug = builtin.mode == .Debug;
 
 const is_wasm = @import("builtin").target.cpu.arch.isWasm();
@@ -337,7 +337,7 @@ export fn Tree_computeLayout(tree: *Tree, width: [*:0]u8, height: [*:0]u8) void 
     defer freeNullTerminatedBuffer(height);
     const width_slice = std.mem.trim(u8, width[0..std.mem.len(width)], " \n\t\r");
     const height_slice = std.mem.trim(u8, height[0..std.mem.len(height)], " \n\t\r");
-    wasm_try(void, tree.computeLayout(wasm_allocator, .{
+    wasm_try(void, computeLayout(tree, wasm_allocator, .{
         .x = width: {
             if (std.mem.eql(u8, width_slice, "min-content")) {
                 break :width .min_content;
@@ -440,8 +440,7 @@ export fn Selection_getHorizontalOffset(
     node_id: u32,
     offset: u32,
 ) f32 {
-    const bp = BoundaryPoint{ .node_id = node_id, .offset = offset };
-    return Tree.Selection.getHorizontalOffset(tree, bp) orelse 0;
+    return Tree.Selection.getHorizontalOffset(tree, .{ .node_id = node_id, .offset = offset }) orelse 0;
 }
 
 export fn Renderer_renderToStdout(renderer: *Renderer, tree: *Tree, clear_screen: bool) void {
@@ -557,7 +556,7 @@ test "wasm" {
         \\height: 9;
         \\width: 4;
     ));
-    Tree_appendChild(tree, node, child);
+    _ = Tree_appendChild(tree, node, child);
     Tree_computeLayout(tree, allocTestString("50"), allocTestString("10"));
     const renderer = Renderer_init();
     defer Renderer_deinit(renderer);

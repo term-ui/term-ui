@@ -7,6 +7,7 @@ const GraphemeIterator = @import("../../uni/GraphemeBreak.zig").Iterator;
 const LineBox = @import("../compute/text/ComputedText.zig").LineBox;
 const LineBoxPart = @import("../compute/text/ComputedText.zig").TextPart;
 const measureText = @import("../../uni/string-width.zig").visible.width.exclude_ansi_colors.utf8;
+const computeLayout = @import("../compute/compute_layout.zig").computeLayout;
 range_id: Range.Id,
 direction: Direction,
 pub const Id = Range.Id;
@@ -622,7 +623,7 @@ test "Selection creation and basic movement" {
     );
     defer tree.deinit();
 
-    try tree.computeLayout(allocator, .{
+    try computeLayout(&tree, allocator, .{
         .x = .{
             .definite = 50,
         },
@@ -782,7 +783,7 @@ test "Selection with XML attributes" {
     );
     defer tree.deinit();
 
-    try tree.computeLayout(allocator, .{
+    try computeLayout(&tree, allocator, .{
         .x = .{
             .definite = 50,
         },
@@ -865,7 +866,7 @@ test "Selection line movement" {
     );
     defer tree.deinit();
 
-    try tree.computeLayout(allocator, .{
+    try computeLayout(&tree, allocator, .{
         .x = .{
             .definite = 50,
         },
@@ -974,7 +975,7 @@ test "Selection movement across boundaries" {
     );
     defer tree.deinit();
 
-    try tree.computeLayout(allocator, .{
+    try computeLayout(&tree, allocator, .{
         .x = .{
             .definite = 50,
         },
@@ -1037,7 +1038,7 @@ test "Move selection from long line to short line" {
     );
     defer tree.deinit();
 
-    try tree.computeLayout(allocator, .{
+    try computeLayout(&tree, allocator, .{
         .x = .{
             .definite = 50,
         },

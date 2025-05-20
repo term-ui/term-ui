@@ -14,6 +14,7 @@ const Selection = @import("../layout/tree/Selection.zig");
 const logger = std.log.scoped(.renderer);
 const NodeIterator = @import("../layout/tree/NodeIterator.zig");
 const BoundaryPoint = @import("../layout/tree/BoundaryPoint.zig");
+const computeLayout = @import("../layout/compute/compute_layout.zig").computeLayout;
 
 canvas: Canvas,
 node_map: std.ArrayList(NodeId),
@@ -298,7 +299,7 @@ test "rendertree" {
     );
     defer renderer.deinit();
 
-    try tree.computeLayout(allocator, .{
+    try computeLayout(tree, allocator, .{
         .x = .{
             .definite = 50,
         },

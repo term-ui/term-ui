@@ -5,7 +5,7 @@ import {
 import { Document } from "@term-ui/dom";
 import path from "node:path";
 const module = await initFromFile(
-  // path.join(distDir, "core-debug.wasm"), //
+  path.join(distDir, "core-debug.wasm"), //
   undefined,
   {
     logFn: (log) => {
@@ -36,13 +36,11 @@ document.root.setStyle(`
 
 `);
 
-const text = document.createTextNode(
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-);
+const str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
+// const str = "lorem ipsum dolor"
+const text = document.createTextNode(str);
 document.root.appendChild(text);
-const text2 = document.createTextNode(
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-);
+const text2 = document.createTextNode(str);
 document.root.appendChild(text2);
 const bpNode = document.createTextNode("[]");
 
@@ -67,6 +65,7 @@ let timeout: number;
 button.addEventListener("click", () => {
   clearTimeout(timeout);
   button.setText("Thank you! 🎉");
+
   document.render(true);
   document.selection?.extendBy(
     "character",
@@ -145,20 +144,21 @@ document.inputManager?.subscribe((e) => {
     pressed = false;
   }
 });
-button.addEventListener("mouse-enter", () => {
-  button.setStyleProperty(
-    "border-color",
-    "radial-gradient(circle, cyan, magenta)",
-  );
-  document.render(true);
-});
-
-button.addEventListener("mouse-leave", () => {
-  button.setStyleProperty(
-    "border-color",
-    "white",
-  );
-  document.render(true);
-});
 
 document.render(true);
+
+// button.addEventListener("mouse-enter", () => {
+//   button.setStyleProperty(
+//     "border-color",
+//     "radial-gradient(circle, cyan, magenta)",
+//   );
+//   document.render(true);
+// });
+
+// button.addEventListener("mouse-leave", () => {
+//   button.setStyleProperty(
+//     "border-color",
+//     "white",
+//   );
+//   document.render(true);
+// });

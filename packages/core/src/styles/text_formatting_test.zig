@@ -8,6 +8,7 @@ const color = styles.color;
 const ComputedStyleCache = styles.computed_style.ComputedStyleCache;
 const Renderer = @import("../renderer/Renderer.zig");
 const Canvas = @import("../renderer/Canvas.zig");
+const computeLayout = @import("../layout/compute/compute_layout.zig").computeLayout;
 
 const testing = std.testing;
 
@@ -326,7 +327,7 @@ test "renderer with text formatting" {
     }
 
     // Compute layout
-    try tree.computeLayout(allocator, .{
+    try computeLayout(tree, allocator, .{
         .x = .{ .definite = 100 },
         .y = .{ .definite = 50 },
     });
