@@ -478,6 +478,8 @@ pub fn getBoundaryAt(
         };
         // std.debug.print("maybe_target_line: {any}\n", .{maybe_target_line});
         if (maybe_target_line) |target_line| {
+            if (target_line.parts.items.len == 0) return null;
+
             var pos = target_line.position.x;
 
             var part_index: usize = 0;
