@@ -28,6 +28,7 @@ export class Selection {
     );
   }
   setAnchor(node: number, offset: number) {
+    this.ghostPosition = null;
     return this.document.module.Selection_setAnchor(
       this.document.tree.ptr,
       this.id,
@@ -36,6 +37,7 @@ export class Selection {
     );
   }
   setFocus(node: number, offset: number) {
+    this.ghostPosition = null;
     return this.document.module.Selection_setFocus(
       this.document.tree.ptr,
       this.id,
@@ -49,13 +51,28 @@ export class Selection {
     direction: keyof typeof SelectionExtendDirection,
     rootNodeId?: number,
   ) {
+    if (granularity === "line") {
+      if (this.ghostPosition === null) {
+        const focus = this.getFocus();
+        this.ghostPosition =
+          this.document.module.Selection_getHorizontalOffset(
+            this.document.tree.ptr,
+            focus.node,
+            focus.offset,
+          );
+      }
+    } else {
+      this.ghostPosition = null;
+    }
     return this.document.module.Selection_extendBy(
       this.document.tree.ptr,
       this.id,
       SelectionExtendGranularity[granularity] ?? raise("Invalid granularity"),
       SelectionExtendDirection[direction] ?? raise("Invalid direction"),
       this.ghostPosition ?? undefined,
-      rootNodeId ?? undefined
+      // Default to the tree root when no specific node is provided so
+      // selection extension can cross node boundaries.
+      rootNodeId ?? 0
     );
   }
 }

@@ -508,6 +508,13 @@ export const getSchema = (
       catchError("Selection_extendBy"),
     ),
 
+    Selection_getHorizontalOffset: pipe(
+      function_(),
+      args(tuple([number(), number(), number()])),
+      returns(number()),
+      catchError("Selection_getHorizontalOffset"),
+    ),
+
     Renderer_init: pipe(
       function_(),
       args(tuple([])),
