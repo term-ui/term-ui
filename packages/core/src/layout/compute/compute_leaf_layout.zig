@@ -10,7 +10,7 @@ const LayoutOutput = compute_constants.LayoutOutput;
 
 const AvailableSpace = compute_constants.AvailableSpace;
 
-pub fn compute_leaf_layout(inputs: LayoutInput, node_id: Node.NodeId, tree: *Tree, measurer: anytype) !LayoutOutput {
+pub fn computeLeafLayout(inputs: LayoutInput, node_id: Node.NodeId, tree: *Tree, measurer: anytype) !LayoutOutput {
     const known_dimensions = inputs.known_dimensions;
     const parent_size = inputs.parent_size;
     const sizing_mode = inputs.sizing_mode;

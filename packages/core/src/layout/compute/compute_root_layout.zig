@@ -14,11 +14,11 @@ const RequestedAxis = ComputeConstants.RequestedAxis;
 const AvailableSpace = ComputeConstants.AvailableSpace;
 const expect = std.testing.expect;
 
-const compute_child_layout = @import("compute_child_layout.zig").compute_child_layout;
+const computeChildLayout = @import("compute_child_layout.zig").computeChildLayout;
 
-pub fn compute_root_layout(allocator: std.mem.Allocator, tree: *Tree, available_space: Point(AvailableSpace)) !void {
+pub fn computeRootLayout(allocator: std.mem.Allocator, tree: *Tree, available_space: Point(AvailableSpace)) !void {
     // const root = tree.getNode(0);
-    const layout = try compute_child_layout(allocator, 0, tree, .{
+    const layout = try computeChildLayout(allocator, 0, tree, .{
         .known_dimensions = Point(?f32).NULL,
         .parent_size = .{ .x = available_space.x.intoOption(), .y = available_space.y.intoOption() },
         .run_mode = RunMode.perform_layout,

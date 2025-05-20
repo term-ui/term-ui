@@ -16,11 +16,11 @@ const Rect = @import("../rect.zig").Rect;
 
 const dumpStruct = @import("../utils/debug.zig").dumpStruct;
 const Line = @import("../line.zig");
-const measure_child_size = @import("measure_child_size.zig").measure_child_size;
-const compute_child_layout = @import("compute_child_layout.zig").compute_child_layout;
-const perform_child_layout = @import("perform_child_layout.zig").perform_child_layout;
-const compute_alignment_offset = @import("compute_alignment_offset.zig").compute_alignment_offset;
-const compute_content_size_contribution = @import("compute_content_size_contribution.zig").compute_content_size_contribution;
+const measureChildSize = @import("measure_child_size.zig").measureChildSize;
+const computeChildLayout = @import("compute_child_layout.zig").computeChildLayout;
+const performChildLayout = @import("perform_child_layout.zig").performChildLayout;
+const computeAlignmentOffset = @import("compute_alignment_offset.zig").computeAlignmentOffset;
+const computeContentSizeContribution = @import("compute_content_size_contribution.zig").computeContentSizeContribution;
 
 const AlgoConstants = struct {
     /// The direction of the current segment being laid out
@@ -67,7 +67,7 @@ const AlgoConstants = struct {
     inner_container_size: Point(f32),
 };
 
-pub fn compute_flexbox_layout(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !LayoutOutput {
+pub fn computeFlexboxLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !LayoutOutput {
     const style = tree.getComputedStyle(node_id);
     const parent_size = inputs.parent_size;
     const sizing_mode = inputs.sizing_mode;
@@ -137,7 +137,7 @@ pub fn compute_flexbox_layout(allocator: std.mem.Allocator, node_id: Node.NodeId
         }
     }
 
-    return compute_preliminary(
+    return computePreliminary(
         allocator,
         tree,
         node_id,
@@ -146,40 +146,40 @@ pub fn compute_flexbox_layout(allocator: std.mem.Allocator, node_id: Node.NodeId
         }),
     );
 }
-pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: Node.NodeId, inputs: LayoutInput) !LayoutOutput {
+pub fn computePreliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: Node.NodeId, inputs: LayoutInput) !LayoutOutput {
     const known_dimensions = inputs.known_dimensions;
     // Define some general constants we will need for the remainder of the algorithm.
-    var constants = compute_constants(tree, node_id, known_dimensions, inputs.parent_size);
+    var constants = computeConstants(tree, node_id, known_dimensions, inputs.parent_size);
     // 9. Flex Layout Algorithm
     // 9.1. Initial Setup
 
     // 1. Generate anonymous flex items as described in §4 Flex Items.
-    // let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
-    var flex_items = try generate_anonymous_flex_items(allocator, tree, node_id, &constants);
+    // let mut flex_items = generateAnonymousFlexItems(tree, node, &constants);
+    var flex_items = try generateAnonymousFlexItems(allocator, tree, node_id, &constants);
     defer flex_items.deinit();
 
     // 9.2. Line Length Determination
 
     // 2. Determine the available main and cross space for the flex items
-    // debug_log!("determine_available_space");
-    const available_space = determine_available_space(
+    // debug_log!("determineAvailableSpace");
+    const available_space = determineAvailableSpace(
         inputs.known_dimensions,
         inputs.available_space,
         &constants,
     );
     // 3. Determine the flex base size and hypothetical main size of each item.
 
-    try determine_flex_base_size(allocator, tree, &constants, available_space, &flex_items);
+    try determineFlexBaseSize(allocator, tree, &constants, available_space, &flex_items);
 
     // 4. Determine the main size of the flex container
-    // This has already been done as part of compute_constants. The inner size is exposed as constants.node_inner_size.
+    // This has already been done as part of computeConstants. The inner size is exposed as constants.node_inner_size.
 
     // 9.3. Main Size Determination
 
     // 5. Collect flex items into flex lines.
 
-    // let mut flex_lines = collect_flex_lines(&constants, available_space, &mut flex_items);
-    var flex_lines = try collect_flex_lines(allocator, &constants, available_space, &flex_items);
+    // let mut flex_lines = collectFlexLines(&constants, available_space, &mut flex_items);
+    var flex_lines = try collectFlexLines(allocator, &constants, available_space, &flex_items);
     defer flex_lines.deinit();
 
     // If container size is undefined, determine the container's main size
@@ -196,7 +196,7 @@ pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: N
     } else {
         const style = tree.getComputedStyle(node_id);
         // Sets constants.container_size and constants.outer_container_size
-        try determine_container_main_size(allocator, tree, available_space, &flex_lines, &constants);
+        try determineContainerMainSize(allocator, tree, available_space, &flex_lines, &constants);
         constants.node_inner_size = dir.setMain(constants.node_inner_size, dir.getMain(constants.inner_container_size));
         constants.node_outer_size = dir.setMain(constants.node_outer_size, dir.getMain(constants.container_size));
 
@@ -207,19 +207,19 @@ pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: N
     }
     // 6. Resolve the flexible lengths of all flex items to find their target main sizes.
     for (flex_lines.items) |*line| {
-        try resolve_flexible_lengths(allocator, line, &constants, original_gap);
+        try resolveFlexibleLengths(allocator, line, &constants, original_gap);
     }
 
     // 9.4. Cross Size Determination
 
     // 7. Determine the hypothetical cross size of each item.
     for (flex_lines.items) |*line| {
-        try determine_hypothetical_cross_size(allocator, tree, line, &constants, available_space);
+        try determineHypotheticalCrossSize(allocator, tree, line, &constants, available_space);
     }
 
     // Calculate child baselines. This function is internally smart and only computes child baselines
     // if they are necessary.
-    try calculate_children_base_lines(
+    try calculateChildrenBaseLines(
         allocator,
         tree,
         known_dimensions,
@@ -229,11 +229,11 @@ pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: N
     );
 
     // 8. Calculate the cross size of each flex line.
-    try calculate_cross_size(&flex_lines, known_dimensions, &constants);
+    try calculateCrossSize(&flex_lines, known_dimensions, &constants);
     //
     // 9. Handle 'align-content: stretch'.
-    // handle_align_content_stretch(&mut flex_lines, known_dimensions, &constants);
-    try handle_align_content_stretch(&flex_lines, known_dimensions, &constants);
+    // handleAlignContentStretch(&mut flex_lines, known_dimensions, &constants);
+    try handleAlignContentStretch(&flex_lines, known_dimensions, &constants);
     // 10. Collapse visibility:collapse items. If any flex items have visibility: collapse,
     //     note the cross size of the line they're in as the item's strut size, and restart
     //     layout from the beginning.
@@ -250,18 +250,18 @@ pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: N
     // TODO implement once (if ever) we support visibility:collapse
 
     // 11. Determine the used cross size of each flex item.
-    try determine_used_cross_size(tree, &flex_lines, &constants);
+    try determineUsedCrossSize(tree, &flex_lines, &constants);
     // 9.5. Main-Axis Alignment
 
     // 12. Distribute any remaining free space.
-    try distribute_remaining_free_space(&flex_lines, &constants);
+    try distributeRemainingFreeSpace(&flex_lines, &constants);
 
     // 9.6. Cross-Axis Alignment
 
     // 13. Resolve cross-axis auto margins (also includes 14).
-    try resolve_cross_axis_auto_margis(&flex_lines, &constants);
+    try resolveCrossAxisAutoMargis(&flex_lines, &constants);
     // 15. Determine the flex container's used cross size.
-    const total_line_cross_size = determine_container_cross_size(&flex_lines, known_dimensions, &constants);
+    const total_line_cross_size = determineContainerCrossSize(&flex_lines, known_dimensions, &constants);
     // We have the container size.
     // If our caller does not care about performing layout we are done now.
     if (inputs.run_mode == .compute_size) {
@@ -269,19 +269,19 @@ pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: N
         return .{ .size = constants.container_size };
     }
     // 16. Align all flex lines per align-content.
-    align_flex_lines_per_align_content(&flex_lines, &constants, total_line_cross_size);
+    alignFlexLinesPerAlignContent(&flex_lines, &constants, total_line_cross_size);
     // Do a final layout pass and gather the resulting layouts
-    const inflow_content_size = try final_layout_pass(allocator, tree, &flex_lines, &constants);
+    const inflow_content_size = try finalLayoutPass(allocator, tree, &flex_lines, &constants);
     // Before returning we perform absolute layout on all absolutely positioned children
-    // debug_log!("perform_absolute_layout_on_absolute_children");
-    // let absolute_content_size = perform_absolute_layout_on_absolute_children(tree, node, &constants);
-    const absolute_content_size = try perform_absolute_layout_on_absolute_children(allocator, tree, node_id, &constants);
+    // debug_log!("performAbsoluteLayoutOnAbsoluteChildren");
+    // let absolute_content_size = performAbsoluteLayoutOnAbsoluteChildren(tree, node, &constants);
+    const absolute_content_size = try performAbsoluteLayoutOnAbsoluteChildren(allocator, tree, node_id, &constants);
 
     for (tree.getChildren(node_id).items, 0..) |child_id, order| {
         const child_style = tree.getComputedStyle(child_id);
         if (child_style.display.outside == .none) {
             tree.setUnroundedLayout(child_id, .{ .order = @as(u32, @intCast(order)), .margin = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 } });
-            _ = try perform_child_layout(
+            _ = try performChildLayout(
                 allocator,
                 child_id,
                 tree,
@@ -331,7 +331,7 @@ pub fn compute_preliminary(allocator: std.mem.Allocator, tree: *Tree, node_id: N
 /// if that dimension of the flex container is being sized under a min or max-content constraint, the available space in that dimension is that constraint;
 /// otherwise, subtract the flex container's margin, border, and padding from the space available to the flex container in that dimension and use that value.
 /// **This might result in an infinite value**.
-pub fn determine_available_space(
+pub fn determineAvailableSpace(
     known_dimensions: Point(?f32),
     outer_available_space: Point(AvailableSpace),
     constants: *AlgoConstants,
@@ -441,7 +441,7 @@ pub const FlexItem = struct {
 /// # [9.1. Initial Setup](https://www.w3.org/TR/css-flexbox-1/#box-manip)
 ///
 /// - [**Generate anonymous flex items**](https://www.w3.org/TR/css-flexbox-1/#algo-anon-box) as described in [§4 Flex Items](https://www.w3.org/TR/css-flexbox-1/#flex-items).
-pub fn generate_anonymous_flex_items(gpa: std.mem.Allocator, tree: *Tree, node_id: Node.NodeId, constants: *AlgoConstants) !std.ArrayList(FlexItem) {
+pub fn generateAnonymousFlexItems(gpa: std.mem.Allocator, tree: *Tree, node_id: Node.NodeId, constants: *AlgoConstants) !std.ArrayList(FlexItem) {
     var flex_items = std.ArrayList(FlexItem).init(gpa);
     for (tree.getChildren(node_id).items, 0..) |child_id, index| {
         const style = tree.getComputedStyle(child_id);
@@ -533,7 +533,7 @@ pub fn generate_anonymous_flex_items(gpa: std.mem.Allocator, tree: *Tree, node_i
 ///     When determining the flex base size, the item's min and max main sizes are ignored (no clamping occurs).
 ///     Furthermore, the sizing calculations that floor the content box size at zero when applying box-sizing are also ignored.
 ///     (For example, an item with a specified size of zero, positive padding, and box-sizing: border-box will have an outer flex base size of zero—and hence a negative inner flex base size.)
-pub fn determine_flex_base_size(
+pub fn determineFlexBaseSize(
     allocator: std.mem.Allocator,
     tree: *Tree,
     constants: *AlgoConstants,
@@ -598,7 +598,7 @@ pub fn determine_flex_base_size(
             //    then the flex base size is calculated from its inner
             //    cross size and the flex item's intrinsic aspect ratio.
 
-            // Note: `child.size` has already been resolved against aspect_ratio in generate_anonymous_flex_items
+            // Note: `child.size` has already been resolved against aspect_ratio in generateAnonymousFlexItems
             // So B will just work here by using main_size without special handling for aspect_ratio
 
             const flex_basis: ?f32 = child_style.flex_basis.maybeResolve(dir.getMain(constants.node_inner_size));
@@ -639,7 +639,7 @@ pub fn determine_flex_base_size(
                 break :blk dir.setCross(space, cross_axis_available_space);
             };
 
-            break :flex_basis try measure_child_size(
+            break :flex_basis try measureChildSize(
                 allocator,
                 child.node_id,
                 tree,
@@ -693,7 +693,7 @@ pub fn determine_flex_base_size(
                     cross_axis_available_space,
                 );
 
-                break :blk try measure_child_size(
+                break :blk try measureChildSize(
                     allocator,
                     child.node_id,
                     tree,
@@ -726,7 +726,7 @@ pub fn determine_flex_base_size(
     }
 }
 
-pub fn compute_constants(tree: *Tree, node_id: Node.NodeId, known_dimensions: Point(?f32), parent_size: Point(?f32)) AlgoConstants {
+pub fn computeConstants(tree: *Tree, node_id: Node.NodeId, known_dimensions: Point(?f32), parent_size: Point(?f32)) AlgoConstants {
     const style = tree.getComputedStyle(node_id);
     const dir = style.flex_direction;
     const is_row = dir.isRow();
@@ -818,7 +818,7 @@ const FlexLine = struct {
         return gap_size * @as(f32, @floatFromInt(count - 1));
     }
 };
-pub fn collect_flex_lines(
+pub fn collectFlexLines(
     allocator: std.mem.Allocator,
     constants: *AlgoConstants,
     available_space: Point(AvailableSpace),
@@ -885,7 +885,7 @@ pub fn collect_flex_lines(
 }
 
 /// Determine the container's main size (if not already known)
-pub fn determine_container_main_size(
+pub fn determineContainerMainSize(
     allocator: std.mem.Allocator,
     tree: *Tree,
     available_space: Point(AvailableSpace),
@@ -1010,7 +1010,7 @@ pub fn determine_container_main_size(
                     // Either the min- or max- content size depending on which constraint we are sizing under.
                     // TODO: Optimise by using already computed values where available
 
-                    const content_main_size = try measure_child_size(
+                    const content_main_size = try measureChildSize(
                         allocator,
                         item.node_id,
                         tree,
@@ -1130,7 +1130,7 @@ pub fn determine_container_main_size(
 /// Sets the `main` component of each item's `target_size` and `outer_target_size`
 ///
 /// # [9.7. Resolving Flexible Lengths](https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths)
-pub fn resolve_flexible_lengths(
+pub fn resolveFlexibleLengths(
     allocator: std.mem.Allocator,
     line: *FlexLine,
     constants: *AlgoConstants,
@@ -1333,7 +1333,7 @@ pub fn resolve_flexible_lengths(
 ///
 /// - [**Determine the hypothetical cross size of each item**](https://www.w3.org/TR/css-flexbox-1/#algo-cross-item)
 ///     by performing layout with the used main size and the available space, treating auto as fit-content.
-pub fn determine_hypothetical_cross_size(
+pub fn determineHypotheticalCrossSize(
     allocator: std.mem.Allocator,
     tree: *Tree,
     line: *FlexLine,
@@ -1359,7 +1359,7 @@ pub fn determine_hypothetical_cross_size(
             dir.getCross(child.max_size),
         ).maybeMax(padding_border_sum);
         const child_inner_cross: f32 = child_cross orelse blk: {
-            const size = try measure_child_size(
+            const size = try measureChildSize(
                 allocator,
                 child.node_id,
                 tree,
@@ -1393,7 +1393,7 @@ pub fn determine_hypothetical_cross_size(
 }
 
 /// Calculate the base lines of the children.
-pub fn calculate_children_base_lines(
+pub fn calculateChildrenBaseLines(
     allocator: std.mem.Allocator,
     tree: *Tree,
     node_size: Point(?f32),
@@ -1428,7 +1428,7 @@ pub fn calculate_children_base_lines(
                 continue;
             }
 
-            const measured_size_and_baselines = try perform_child_layout(
+            const measured_size_and_baselines = try performChildLayout(
                 allocator,
                 child.node_id,
                 tree,
@@ -1484,7 +1484,7 @@ pub fn calculate_children_base_lines(
 ///
 ///         If the flex container is single-line, then clamp the line's cross-size to be within the container's computed min and max cross sizes.
 ///         **Note that if CSS 2.1's definition of min/max-width/height applied more generally, this behavior would fall out automatically**.
-pub fn calculate_cross_size(
+pub fn calculateCrossSize(
     flex_lines: *std.ArrayList(FlexLine),
     node_size: Point(?f32),
     constants: *AlgoConstants,
@@ -1497,9 +1497,9 @@ pub fn calculate_cross_size(
     if (flex_lines.items.len == 1 and
         dir.getCross(node_size) != null and
         (!constants.is_wrap or
-        constants.align_content == .stretch or
-        constants.align_content == .space_evenly or
-        constants.align_content == .space_around))
+            constants.align_content == .stretch or
+            constants.align_content == .space_evenly or
+            constants.align_content == .space_around))
     {
         const cross_axis_padding_border = dir.sumCrossAxis(constants.content_box_inset);
         const cross_min_size = dir.getCross(constants.min_size);
@@ -1566,7 +1566,7 @@ pub fn calculate_cross_size(
 /// - [**Handle 'align-content: stretch'**](https://www.w3.org/TR/css-flexbox-1/#algo-line-stretch). If the flex container has a definite cross size, align-content is stretch,
 ///     and the sum of the flex lines' cross sizes is less than the flex container's inner cross size,
 ///     increase the cross size of each flex line by equal amounts such that the sum of their cross sizes exactly equals the flex container's inner cross size.
-pub fn handle_align_content_stretch(
+pub fn handleAlignContentStretch(
     flex_lines: *std.ArrayList(FlexLine),
     node_size: Point(?f32),
     constants: *AlgoConstants,
@@ -1620,7 +1620,7 @@ pub fn handle_align_content_stretch(
 ///     If the flex item has align-self: stretch, redo layout for its contents, treating this used size as its definite cross size so that percentage-sized children can be resolved.
 ///
 ///     **Note that this step does not affect the main size of the flex item, even if it has an intrinsic aspect ratio**.
-pub fn determine_used_cross_size(
+pub fn determineUsedCrossSize(
     tree: *Tree,
     flex_lines: *std.ArrayList(FlexLine),
     constants: *AlgoConstants,
@@ -1669,7 +1669,7 @@ pub fn determine_used_cross_size(
 ///         Otherwise, set all `auto` margins to zero.
 ///
 ///     2. Align the items along the main-axis per `justify-content`.
-pub fn distribute_remaining_free_space(
+pub fn distributeRemainingFreeSpace(
     flex_lines: *std.ArrayList(FlexLine),
     constants: *AlgoConstants,
 ) !void {
@@ -1725,7 +1725,7 @@ pub fn distribute_remaining_free_space(
             const justify_content_mode = constants.justify_content orelse .flex_start;
 
             for (line.items, 0..) |*child, i| {
-                child.offset_main = compute_alignment_offset(
+                child.offset_main = computeAlignmentOffset(
                     free_space,
                     num_items,
                     gap,
@@ -1750,7 +1750,7 @@ pub fn distribute_remaining_free_space(
 ///
 ///     - Otherwise, if the block-start or inline-start margin (whichever is in the cross axis) is auto, set it to zero.
 ///         Set the opposite margin so that the outer cross size of the item equals the cross size of its flex line.
-pub fn resolve_cross_axis_auto_margis(
+pub fn resolveCrossAxisAutoMargis(
     flex_lines: *std.ArrayList(FlexLine),
     constants: *AlgoConstants,
 ) !void {
@@ -1785,7 +1785,7 @@ pub fn resolve_cross_axis_auto_margis(
                     child.margin.right = free_space;
                 }
             } else {
-                child.offset_cross = align_flex_items_along_cross_axis(child, free_space, max_baseline, constants);
+                child.offset_cross = alignFlexItemsAlongCrossAxis(child, free_space, max_baseline, constants);
             }
         }
     }
@@ -1797,7 +1797,7 @@ pub fn resolve_cross_axis_auto_margis(
 /// - [**Align all flex items along the cross-axis**](https://www.w3.org/TR/css-flexbox-1/#algo-cross-align) per `align-self`,
 ///     if neither of the item's cross-axis margins are `auto`.
 // #[inline]
-pub fn align_flex_items_along_cross_axis(
+pub fn alignFlexItemsAlongCrossAxis(
     child: *FlexItem,
     free_space: f32,
     max_baseline: f32,
@@ -1852,7 +1852,7 @@ pub fn align_flex_items_along_cross_axis(
 ///     - If the cross size property is a definite size, use that, clamped by the used min and max cross sizes of the flex container.
 ///
 ///     - Otherwise, use the sum of the flex lines' cross sizes, clamped by the used min and max cross sizes of the flex container.
-pub fn determine_container_cross_size(
+pub fn determineContainerCrossSize(
     flex_lines: *std.ArrayList(FlexLine),
     node_size: Point(?f32),
     constants: *AlgoConstants,
@@ -1888,7 +1888,7 @@ pub fn determine_container_cross_size(
 /// # [9.6. Cross-Axis Alignment](https://www.w3.org/TR/css-flexbox-1/#cross-alignment)
 ///
 /// - [**Align all flex lines**](https://www.w3.org/TR/css-flexbox-1/#algo-line-align) per `align-content`.
-pub fn align_flex_lines_per_align_content(
+pub fn alignFlexLinesPerAlignContent(
     flex_lines: *std.ArrayList(FlexLine),
     constants: *AlgoConstants,
     total_cross_size: f32,
@@ -1906,7 +1906,7 @@ pub fn align_flex_lines_per_align_content(
     const free_space: f32 = dir.getCross(constants.inner_container_size) - total_cross_size - total_cross_axis_gap;
 
     for (flex_lines.items, 0..) |*line, i| {
-        line.offset_cross = compute_alignment_offset(
+        line.offset_cross = computeAlignmentOffset(
             free_space,
             num_lines,
             gap,
@@ -1918,7 +1918,7 @@ pub fn align_flex_lines_per_align_content(
 }
 
 /// Do a final layout pass and collect the resulting layouts.
-pub fn final_layout_pass(
+pub fn finalLayoutPass(
     allocator: std.mem.Allocator,
     tree: *Tree,
     flex_lines: *std.ArrayList(FlexLine),
@@ -1930,7 +1930,7 @@ pub fn final_layout_pass(
     if (constants.is_wrap_reverse) {
         var iter = Iter.sliceReverse(flex_lines.items);
         while (iter.next()) |line| {
-            try calculate_layout_line(
+            try calculateLayoutLine(
                 allocator,
                 tree,
                 line,
@@ -1945,7 +1945,7 @@ pub fn final_layout_pass(
     } else {
         var iter = Iter.slice(flex_lines.items);
         while (iter.next()) |line| {
-            try calculate_layout_line(
+            try calculateLayoutLine(
                 allocator,
                 tree,
                 line,
@@ -1963,7 +1963,7 @@ pub fn final_layout_pass(
 }
 
 /// Calculates the layout line
-pub fn calculate_layout_line(
+pub fn calculateLayoutLine(
     allocator: std.mem.Allocator,
     tree: *Tree,
     line: *FlexLine,
@@ -1981,7 +1981,7 @@ pub fn calculate_layout_line(
     if (dir.isReverse()) {
         var iter = Iter.sliceReverse(line.items);
         while (iter.next()) |item| {
-            try calculate_flex_item(
+            try calculateFlexItem(
                 allocator,
                 tree,
                 item,
@@ -1997,7 +1997,7 @@ pub fn calculate_layout_line(
     } else {
         var iter = Iter.slice(line.items);
         while (iter.next()) |item| {
-            try calculate_flex_item(
+            try calculateFlexItem(
                 allocator,
                 tree,
                 item,
@@ -2015,7 +2015,7 @@ pub fn calculate_layout_line(
     total_offset_cross.* += line_offset_cross + line.cross_size;
 }
 /// Calculates the layout for a flex-item
-pub fn calculate_flex_item(
+pub fn calculateFlexItem(
     allocator: std.mem.Allocator,
     tree: *Tree,
     item: *FlexItem,
@@ -2027,7 +2027,7 @@ pub fn calculate_flex_item(
     node_inner_size: Point(?f32),
     dir: styles.flex_direction.FlexDirection,
 ) !void {
-    const layout_output: LayoutOutput = try perform_child_layout(
+    const layout_output: LayoutOutput = try performChildLayout(
         allocator,
         item.node_id,
         tree,
@@ -2099,12 +2099,12 @@ pub fn calculate_flex_item(
 
     total_offset_main.* += item.offset_main + dir.sumMainAxis(item.margin) + dir.getMain(size);
     total_content_size.* = total_content_size.max(
-        compute_content_size_contribution(location, size, content_size, item.overflow),
+        computeContentSizeContribution(location, size, content_size, item.overflow),
     );
 }
 
 /// Perform absolute layout on all absolutely positioned children.
-pub fn perform_absolute_layout_on_absolute_children(
+pub fn performAbsoluteLayoutOnAbsoluteChildren(
     allocator: std.mem.Allocator,
     tree: *Tree,
     node_id: Node.NodeId,
@@ -2168,7 +2168,7 @@ pub fn perform_absolute_layout_on_absolute_children(
             known_dimensions = known_dimensions.maybeApplyAspectRatio(aspect_ratio).maybeClamp(min_size, max_size);
         }
 
-        const layout_output = try perform_child_layout(
+        const layout_output = try performChildLayout(
             allocator,
             child_id,
             tree,
@@ -2382,7 +2382,7 @@ pub fn len(length: f32) Style.LengthPercentageAuto {
 }
 const test_allocator = std.testing.allocator;
 
-// test "compute_flexbox_layout" {
+// test "computeFlexboxLayout" {
 //     const gpa = test_allocator;
 //     const block = Node.block;
 //     const compute_root_layout = @import("compute_root_layout.zig").compute_root_layout;

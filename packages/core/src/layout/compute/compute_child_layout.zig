@@ -9,11 +9,11 @@ const compute_constants = @import("compute_constants.zig");
 const AvailableSpace = compute_constants.AvailableSpace;
 const SizingMode = compute_constants.SizingMode;
 
-const compute_flexbox_layout = @import("compute_flexbox_layout.zig").compute_flexbox_layout;
-const compute_leaf_layout = @import("compute_leaf_layout.zig").compute_leaf_layout;
+const computeFlexboxLayout = @import("compute_flexbox_layout.zig").computeFlexboxLayout;
+const computeLeafLayout = @import("compute_leaf_layout.zig").computeLeafLayout;
 // const compute_line_breaks = @import("compute_line_breaks.zig").compute_line_breaks;
-const compute_block_layout = @import("compute_block_layout.zig").computeBlockLayout;
-const compute_text_layout = @import("./text/compute-text-layout.zig").computeTextLayout;
+const computeBlockLayout = @import("compute_block_layout.zig").computeBlockLayout;
+const computeTextLayout = @import("./text/compute-text-layout.zig").computeTextLayout;
 
 fn Measurer() fn (known_dimensions: Point(?f32), available_space: Point(AvailableSpace)) Point(f32) {
     return struct {
@@ -35,14 +35,14 @@ fn Measurer() fn (known_dimensions: Point(?f32), available_space: Point(Availabl
         }
     }.fun;
 }
-pub fn get_cached_layout(node: *Node, inputs: LayoutInput) ?LayoutOutput {
+pub fn getCachedLayout(node: *Node, inputs: LayoutInput) ?LayoutOutput {
     return node.cache.get(
         inputs.known_dimensions,
         inputs.available_space,
         inputs.run_mode,
     );
 }
-pub fn compute_child_layout(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !LayoutOutput {
+pub fn computeChildLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !LayoutOutput {
     if (tree.getCache(node_id).get(
         inputs.known_dimensions,
         inputs.available_space,
@@ -56,30 +56,30 @@ pub fn compute_child_layout(allocator: std.mem.Allocator, node_id: Node.NodeId, 
         const display = style.display;
         // if (tree.getChildren(node_id).items.len == 0 and style.display.inside != .flow) {
         if (display.isInlineFlow()) {
-            break :blk try compute_text_layout(allocator, node_id, tree, inputs);
+            break :blk try computeTextLayout(allocator, node_id, tree, inputs);
         }
         if (tree.getChildren(node_id).items.len == 0) {
-            break :blk try compute_leaf_layout(inputs, node_id, tree, Measurer());
+            break :blk try computeLeafLayout(inputs, node_id, tree, Measurer());
         }
 
         // try compute_line_breaks(allocator, node);
         break :blk switch (display.outside) {
-            // .flex => try compute_flexbox_layout(allocator, node, inputs),
+            // .flex => try computeFlexboxLayout(allocator, node, inputs),
             .block => switch (display.inside) {
-                .flex => try compute_flexbox_layout(allocator, node_id, tree, inputs),
-                .flow_root => try compute_block_layout(allocator, node_id, tree, inputs),
-                .flow => try compute_block_layout(allocator, node_id, tree, inputs),
+                .flex => try computeFlexboxLayout(allocator, node_id, tree, inputs),
+                .flow_root => try computeBlockLayout(allocator, node_id, tree, inputs),
+                .flow => try computeBlockLayout(allocator, node_id, tree, inputs),
             },
             .@"inline" => switch (display.inside) {
-                .flex => try compute_flexbox_layout(allocator, node_id, tree, inputs),
-                .flow_root => try compute_block_layout(allocator, node_id, tree, inputs),
-                .flow => try compute_block_layout(allocator, node_id, tree, inputs),
+                .flex => try computeFlexboxLayout(allocator, node_id, tree, inputs),
+                .flow_root => try computeBlockLayout(allocator, node_id, tree, inputs),
+                .flow => try computeBlockLayout(allocator, node_id, tree, inputs),
             },
             .none => return error.unimplemented,
         };
         // break :blk switch (node.styles.display) {
-        //     .flex => try compute_flexbox_layout(allocator, node, inputs),
-        //     .block => try compute_block_layout(allocator, node, inputs),
+        //     .flex => try computeFlexboxLayout(allocator, node, inputs),
+        //     .block => try computeBlockLayout(allocator, node, inputs),
         //     else => return error.unimplemented,
         // };
     };
@@ -94,8 +94,8 @@ pub fn compute_child_layout(allocator: std.mem.Allocator, node_id: Node.NodeId, 
     return computed;
 }
 
-// pub fn compute_text_layout(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !LayoutOutput {
+// pub fn computeTextLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree, inputs: LayoutInput) !LayoutOutput {
 //     const node = tree.getNode(node_id);
-//     try compute_flexbox_layout(allocator, node_id, tree, inputs);
-//     return compute_leaf_layout(inputs, node, Measurer());
+//     try computeFlexboxLayout(allocator, node_id, tree, inputs);
+//     return computeLeafLayout(inputs, node, Measurer());
 // }

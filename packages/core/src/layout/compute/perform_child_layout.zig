@@ -8,14 +8,14 @@ const Line = @import("../line.zig").Line;
 const compute_constants = @import("compute_constants.zig");
 const AvailableSpace = compute_constants.AvailableSpace;
 const SizingMode = compute_constants.SizingMode;
-const compute_child_layout = @import("compute_child_layout.zig").compute_child_layout;
+const computeChildLayout = @import("compute_child_layout.zig").computeChildLayout;
 
 const PerformChildLayoutError = error{
     FailedToPerformChildLayout,
     NodeNotFound,
 };
 
-pub fn perform_child_layout(
+pub fn performChildLayout(
     allocator: std.mem.Allocator,
     node_id: Node.NodeId,
     tree: *Tree,
@@ -25,7 +25,7 @@ pub fn perform_child_layout(
     sizing_mode: SizingMode,
     vertical_margins_are_collapsible: Line(bool),
 ) PerformChildLayoutError!LayoutOutput {
-    return compute_child_layout(
+    return computeChildLayout(
         allocator,
         node_id,
         tree,

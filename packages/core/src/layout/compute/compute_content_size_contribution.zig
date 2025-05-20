@@ -1,7 +1,7 @@
 const Point = @import("../point.zig").Point;
 const styles = @import("../../styles/styles.zig");
 /// Determine how much width/height a given node contributes to it's parent's content size
-pub fn compute_content_size_contribution(
+pub fn computeContentSizeContribution(
     location: Point(f32),
     size: Point(f32),
     content_size: Point(f32),

@@ -6,14 +6,14 @@ const constants = @import("compute_constants.zig");
 const AvailableSpace = constants.AvailableSpace;
 const SizingMode = constants.SizingMode;
 const AbsoluteAxis = constants.AbsoluteAxis;
-const compute_child_layout = @import("compute_child_layout.zig").compute_child_layout;
+const computeChildLayout = @import("compute_child_layout.zig").computeChildLayout;
 const MeasureChildError = error{
     FailedToComputeChildLayout,
 };
 
 const std = @import("std");
 
-pub fn measure_child_size(
+pub fn measureChildSize(
     allocator: std.mem.Allocator,
     node_id: Node.NodeId,
     tree: *Tree,
@@ -24,7 +24,7 @@ pub fn measure_child_size(
     axis: AbsoluteAxis,
     vertical_margins_are_collapsible: Line(bool),
 ) MeasureChildError!f32 {
-    const child_layout = compute_child_layout(
+    const child_layout = computeChildLayout(
         allocator,
         node_id,
         tree,
