@@ -55,7 +55,9 @@ export class Selection {
       SelectionExtendGranularity[granularity] ?? raise("Invalid granularity"),
       SelectionExtendDirection[direction] ?? raise("Invalid direction"),
       this.ghostPosition ?? undefined,
-      rootNodeId ?? undefined
+      // Default to the tree root when no specific node is provided so
+      // selection extension can cross node boundaries.
+      rootNodeId ?? 0
     );
   }
 }
