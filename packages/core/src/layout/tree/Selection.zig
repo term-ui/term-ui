@@ -387,8 +387,11 @@ pub fn getBoundaryAt(
                     line_box_indexes.part_index,
                     root_node_id,
                 ) orelse return null;
+
+                const part_root = findLineBoxAncestor(tree, target_part.node_id);
+                const part_ct = tree.getComputedText(part_root) orelse return null;
                 var grapheme_iter = GraphemeIterator.init(
-                    computed_text.slice(
+                    part_ct.slice(
                         target_part.node_offset,
                         target_part.node_offset + target_part.length,
                     ),
@@ -412,8 +415,11 @@ pub fn getBoundaryAt(
                     line_box_indexes.part_index,
                     root_node_id,
                 ) orelse return null;
+
+                const part_root = findLineBoxAncestor(tree, target_part.node_id);
+                const part_ct = tree.getComputedText(part_root) orelse return null;
                 var grapheme_iter = GraphemeIterator.init(
-                    computed_text.slice(
+                    part_ct.slice(
                         target_part.node_offset,
                         target_part.node_offset + target_part.length,
                     ),
