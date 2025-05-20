@@ -145,7 +145,10 @@ pub fn findLineBox(tree: *Tree, focus: BoundaryPoint) ?struct {
 
     for (computed_style.lines.items, 0..) |line, i| {
         for (line.parts.items, 0..) |part, j| {
-            if (part.node_id == focus.node_id and focus.offset >= part.node_offset and focus.offset < part.node_offset + part.length) {
+            if (part.node_id == focus.node_id and
+                focus.offset >= part.node_offset and
+                focus.offset <= part.node_offset + part.length)
+            {
                 return .{ .line_index = i, .part_index = j, .root_node_id = root_node_id };
             }
         }
