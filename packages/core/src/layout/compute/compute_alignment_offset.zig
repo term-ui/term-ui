@@ -7,7 +7,7 @@ const AlignContent = @import("../tree/Style.zig").AlignContent;
 ///   - For both the Flexbox and CSS Grid algorithms
 /// CSS Grid does not apply gaps as part of alignment, so the gap parameter should
 /// always be set to zero for CSS Grid.
-pub fn compute_alignment_offset(
+pub fn computeAlignmentOffset(
     free_space: f32,
     num_items: usize,
     gap: f32,
@@ -60,7 +60,7 @@ pub fn compute_alignment_offset(
         }
     }
 }
-// pub(crate) fn compute_alignment_offset(
+// pub(crate) fn computeAlignmentOffset(
 //     free_space: f32,
 //     num_items: usize,
 //     gap: f32,

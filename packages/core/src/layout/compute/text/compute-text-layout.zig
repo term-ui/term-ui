@@ -16,7 +16,7 @@ const TextPart = ComputedText.TextPart;
 const Maybe = @import("../../utils/Maybe.zig");
 const assert = std.debug.assert;
 const logger = std.log.scoped(.compute_text_layout);
-const perform_child_layout = @import("../perform_child_layout.zig").perform_child_layout;
+const performChildLayout = @import("../perform_child_layout.zig").performChildLayout;
 const measureUtf8 = @import("../../../uni/string-width.zig").visible.width.exclude_ansi_colors.utf8;
 
 const LineBreak = @import("../../../uni/LineBreak.zig");
@@ -391,7 +391,7 @@ fn collectText(allocator: std.mem.Allocator, parts_array: *Array(TextPart), node
     }
 
     if (!display.isInlineFlow()) {
-        const measured = try perform_child_layout(
+        const measured = try performChildLayout(
             allocator,
             node_id,
             tree,

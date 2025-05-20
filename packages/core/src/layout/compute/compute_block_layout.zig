@@ -20,8 +20,8 @@ const SizingMode = @import("compute_constants.zig").SizingMode;
 const CollapsibleMarginSet = @import("compute_constants.zig").CollapsibleMarginSet;
 const styles = @import("../../styles/styles.zig");
 const with = @import("../utils/comptime.zig").with;
-const perform_child_layout = @import("perform_child_layout.zig").perform_child_layout;
-const compute_content_size_contribution = @import("compute_content_size_contribution.zig").compute_content_size_contribution;
+const performChildLayout = @import("perform_child_layout.zig").performChildLayout;
+const computeContentSizeContribution = @import("compute_content_size_contribution.zig").computeContentSizeContribution;
 const ItemKind = union(enum) {
     block: Node.NodeId,
     inline_stream: Array(Node.NodeId),
@@ -249,7 +249,7 @@ fn computeInner(allocator: std.mem.Allocator, node_id: Node.NodeId, tree: *Tree,
                 .order = @intCast(order),
                 .margin = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
             });
-            _ = try perform_child_layout(
+            _ = try performChildLayout(
                 allocator,
                 child_id,
                 tree,
@@ -400,7 +400,7 @@ pub fn determineContentBasedContainerWidth(
             const item_x_margin_sum: f32 = item.margin.maybeResolve(available_space_width).orZero().sumHorizontal();
             // switch (item.nodes) {
             //     .block => |child| {
-            const size_and_baselines = try perform_child_layout(
+            const size_and_baselines = try performChildLayout(
                 allocator,
                 item.node_id,
                 tree,
@@ -499,7 +499,7 @@ fn performFinalLayoutOnInFlowChildren(
             .y = available_space.y,
         };
 
-        const item_layout = try perform_child_layout(
+        const item_layout = try performChildLayout(
             allocator,
             item.node_id,
             tree,
@@ -510,7 +510,7 @@ fn performFinalLayoutOnInFlowChildren(
             .{ .start = true, .end = true },
         );
         // const item_layout = switch (item.nodes) {
-        //     .block => |child| try perform_child_layout(
+        //     .block => |child| try performChildLayout(
         //         allocator,
         //         child,
         //         tree,
@@ -612,7 +612,7 @@ fn performFinalLayoutOnInFlowChildren(
 
         tree.setUnroundedLayout(item.node_id, layout);
 
-        inflow_content_size = inflow_content_size.max(compute_content_size_contribution(
+        inflow_content_size = inflow_content_size.max(computeContentSizeContribution(
             location,
             final_size,
             item_layout.content_size,
@@ -714,7 +714,7 @@ pub fn performAbsoluteLayoutOnAbsoluteChildren(
             known_dimensions = known_dimensions.maybeApplyAspectRatio(aspect_ratio).maybeClamp(min_size, max_size);
         };
 
-        const layout_output = try perform_child_layout(
+        const layout_output = try performChildLayout(
             allocator,
             child_id,
             tree,
@@ -835,7 +835,7 @@ pub fn performAbsoluteLayoutOnAbsoluteChildren(
             .margin = resolved_margin,
         });
 
-        absolute_content_size = absolute_content_size.max(compute_content_size_contribution(
+        absolute_content_size = absolute_content_size.max(computeContentSizeContribution(
             location,
             final_size,
             layout_output.content_size,

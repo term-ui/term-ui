@@ -4,8 +4,6 @@ const std = @import("std");
 const xml = @import("../../xml.zig");
 pub const Style = @import("Style.zig");
 const Color = @import("../../colors/Color.zig");
-const compute_root_layout = @import("../compute/compute_root_layout.zig").compute_root_layout;
-const round_layout = @import("../compute/round_layout.zig").round_layout;
 const HashMap = std.AutoHashMap;
 const Layout = @import("Layout.zig");
 const Cache = @import("Cache.zig");
@@ -40,6 +38,7 @@ live_range_counter: u32 = 0,
 
 const Self = @This();
 
+usingnamespace @import("../compute/compute_layout.zig");
 pub const ROOT_NODE_ID: Node.NodeId = 0;
 pub fn init(allocator: std.mem.Allocator) !Self {
     // Initialize style system and tree together
@@ -1173,29 +1172,6 @@ pub fn invalidateStyles(self: *Self, node_id: Node.NodeId) void {
     self.markDirty(node_id);
 }
 
-pub fn computeLayout(self: *Self, allocator: std.mem.Allocator, available_space: Point(AvailableSpace)) !void {
-    // Compute the actual layout
-
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    var root_style: Style = .{};
-    root_style.text_decoration = .{
-        .line = .none,
-    };
-    root_style.font_weight = .normal;
-    root_style.font_style = .normal;
-    root_style.text_align = .left;
-    root_style.text_wrap = .wrap;
-
-    try self.computed_style_cache.computeStyle(self, 0, root_style);
-
-    try compute_root_layout(arena.allocator(), self, available_space);
-    round_layout(0, self, 0);
-}
-
-// test "createtree" {
-//     var tree = try parseTree(std.testing.allocator,
-//         \\<div display="flex" width="20"  flex-direction="column" justify-content="center" overflow="hidden">
 //         // \\  <div display="block" width="100%" height="100%">
 //         \\    <span><div display="block" width="1" height="1"></div>Lorem ipsum dolor sit am <div display="inline-block"></div>et<div display="block" width="1" height="1"></div></span>
 //         // \\    <span>Lorem ipsum dolor sit am<span>et, cons</span>ec<span>tetur adipiscing elit. </span></span>
@@ -1212,9 +1188,7 @@ pub fn computeLayout(self: *Self, allocator: std.mem.Allocator, available_space:
 
 //     var arena = std.heap.ArenaAllocator.init(testing_allocator);
 //     defer arena.deinit();
-//     try compute_root_layout(arena.allocator(), &tree, .{ .x = .{ .definite = 100 }, .y = .{ .definite = 100 } });
 
-//     round_layout(0, &tree, 1);
 //     const layout = tree.getLayout(0);
 //     std.debug.print("\n\nlayout:\n{any}\n", .{(layout)});
 //     try tree.print(writer);

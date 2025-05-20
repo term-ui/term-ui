@@ -90,6 +90,6 @@ fn round_inner(node_id: Node.NodeId, tree: *Tree, cumulative: Point(f32), compti
     }
 }
 
-pub fn round_layout(node_id: Node.NodeId, tree: *Tree, comptime precision: f32) void {
+pub fn roundLayout(node_id: Node.NodeId, tree: *Tree, comptime precision: f32) void {
     round_inner(node_id, tree, .{ .x = 0.0, .y = 0.0 }, precision);
 }
