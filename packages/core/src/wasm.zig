@@ -1,5 +1,5 @@
-const Tree = @import("layout/tree/Tree.zig");
-const Style = @import("layout/tree/Style.zig");
+const Tree = @import("tree/Tree.zig");
+const Style = @import("tree/Style.zig");
 const std = @import("std");
 const parsers = @import("styles/styles.zig");
 const Renderer = @import("renderer/Renderer.zig");
@@ -579,7 +579,7 @@ test "should_set_style" {
 const Cursor = @import("styles/cursor.zig").Cursor;
 
 test {
-    _ = @import("./layout/tree/Range.zig");
+    _ = @import("./tree/Range.zig");
     _ = @import("./uni/GraphemeBreak.zig");
-    _ = @import("./layout/tree/NodeIterator.zig");
+    _ = @import("./tree/NodeIterator.zig");
 }

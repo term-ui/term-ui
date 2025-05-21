@@ -1,7 +1,7 @@
-const Node = @import("../tree/Node.zig");
-const Tree = @import("../tree/Tree.zig");
+const Node = @import("../../tree/Node.zig");
+const Tree = @import("../../tree/Tree.zig");
 // Generic CSS alignment code that is shared between both the Flexbox and CSS Grid algorithms.
-const AlignContent = @import("../tree/Style.zig").AlignContent;
+const AlignContent = @import("../../tree/Style.zig").AlignContent;
 /// Generic alignment function that is used:
 ///   - For both align-content and justify-content alignment
 ///   - For both the Flexbox and CSS Grid algorithms

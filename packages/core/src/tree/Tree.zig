@@ -1,29 +1,29 @@
 pub const Node = @import("Node.zig");
-const Point = @import("../point.zig").Point;
+const Point = @import("../layout/point.zig").Point;
 const std = @import("std");
-const xml = @import("../../xml.zig");
+const xml = @import("../xml.zig");
 pub const Style = @import("Style.zig");
-const Color = @import("../../colors/Color.zig");
+const Color = @import("../colors/Color.zig");
 const HashMap = std.AutoHashMap;
 const Layout = @import("Layout.zig");
 const Cache = @import("Cache.zig");
-const ComputedText = @import("../compute/text/ComputedText.zig");
-const Rect = @import("../rect.zig").Rect;
-pub const AvailableSpace = @import("../compute/compute_constants.zig").AvailableSpace;
-const s = @import("../../styles/styles.zig");
+const ComputedText = @import("../layout/compute/text/ComputedText.zig");
+const Rect = @import("../layout/rect.zig").Rect;
+pub const AvailableSpace = @import("../layout/compute/compute_constants.zig").AvailableSpace;
+const s = @import("../styles/styles.zig");
 const ComputedStyleCache = s.computed_style.ComputedStyleCache;
 const StyleManager = s.style_manager.StyleManager;
-const InputManager = @import("../../cmd/input/manager.zig").AnyInputManager;
-const Event = @import("../../cmd/input/manager.zig").Event;
+const InputManager = @import("../cmd/input/manager.zig").AnyInputManager;
+const Event = @import("../cmd/input/manager.zig").Event;
 const String = @import("String.zig");
 const Range = @import("Range.zig");
 pub const BoundaryPoint = @import("BoundaryPoint.zig");
 const NodeIterator = @import("NodeIterator.zig");
 pub const Selection = @import("Selection.zig");
 const traversal = @import("./traversal.zig");
-const Canvas = @import("../../renderer/Canvas.zig");
-const GraphemeIterator = @import("../../uni/GraphemeBreak.zig").Iterator;
-const visible = @import("../../uni/string-width.zig").visible;
+const Canvas = @import("../renderer/Canvas.zig");
+const GraphemeIterator = @import("../uni/GraphemeBreak.zig").Iterator;
+const visible = @import("../uni/string-width.zig").visible;
 
 node_map: std.AutoHashMapUnmanaged(Node.NodeId, Node) = .{},
 allocator: std.mem.Allocator,
@@ -38,7 +38,7 @@ live_range_counter: u32 = 0,
 
 const Self = @This();
 
-usingnamespace @import("../compute/compute_layout.zig");
+usingnamespace @import("../layout/compute/compute_layout.zig");
 pub const ROOT_NODE_ID: Node.NodeId = 0;
 pub fn init(allocator: std.mem.Allocator) !Self {
     // Initialize style system and tree together

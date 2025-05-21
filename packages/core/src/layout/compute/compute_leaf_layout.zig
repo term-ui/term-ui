@@ -1,7 +1,7 @@
 //! Computes size using styles and measure functions
 const std = @import("std");
-const Node = @import("../tree/Node.zig");
-const Tree = @import("../tree/Tree.zig");
+const Node = @import("../../tree/Node.zig");
+const Tree = @import("../../tree/Tree.zig");
 const Point = @import("../point.zig").Point;
 const Maybe = @import("../utils/Maybe.zig");
 const compute_constants = @import("compute_constants.zig");

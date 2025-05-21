@@ -1,11 +1,11 @@
 /// Computes the CSS block layout algorithm in the case that the block container being laid out contains only block-level boxes
 const std = @import("std");
 const Array = std.ArrayList;
-const Layout = @import("../tree/Layout.zig");
-const Node = @import("../tree/Node.zig");
-const Tree = @import("../tree/Tree.zig");
+const Layout = @import("../../tree/Layout.zig");
+const Node = @import("../../tree/Node.zig");
+const Tree = @import("../../tree/Tree.zig");
 const Point = @import("../point.zig").Point;
-const Styles = @import("../tree/Style.zig");
+const Styles = @import("../../tree/Style.zig");
 const Overflow = Styles.Overflow;
 const LengthPercentageAuto = Styles.LengthPercentageAuto;
 const Position = Styles.Position;

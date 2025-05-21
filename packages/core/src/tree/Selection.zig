@@ -3,11 +3,11 @@ const Range = @import("Range.zig");
 const BoundaryPoint = @import("./BoundaryPoint.zig");
 const Tree = @import("./Tree.zig");
 const Node = @import("./Node.zig");
-const GraphemeIterator = @import("../../uni/GraphemeBreak.zig").Iterator;
-const LineBox = @import("../compute/text/ComputedText.zig").LineBox;
-const LineBoxPart = @import("../compute/text/ComputedText.zig").TextPart;
-const measureText = @import("../../uni/string-width.zig").visible.width.exclude_ansi_colors.utf8;
-const computeLayout = @import("../compute/compute_layout.zig").computeLayout;
+const GraphemeIterator = @import("../uni/GraphemeBreak.zig").Iterator;
+const LineBox = @import("../layout/compute/text/ComputedText.zig").LineBox;
+const LineBoxPart = @import("../layout/compute/text/ComputedText.zig").TextPart;
+const measureText = @import("../uni/string-width.zig").visible.width.exclude_ansi_colors.utf8;
+const computeLayout = @import("../layout/compute/compute_layout.zig").computeLayout;
 range_id: Range.Id,
 direction: Direction,
 pub const Id = Range.Id;

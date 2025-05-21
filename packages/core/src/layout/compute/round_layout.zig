@@ -1,5 +1,5 @@
-const Node = @import("../tree/Node.zig");
-const Tree = @import("../tree/Tree.zig");
+const Node = @import("../../tree/Node.zig");
+const Tree = @import("../../tree/Tree.zig");
 const Point = @import("../point.zig").Point;
 
 const std = @import("std");

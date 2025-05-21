@@ -1,7 +1,7 @@
 const std = @import("std");
-const Tree = @import("../layout/tree/Tree.zig");
-const Node = @import("../layout/tree/Node.zig");
-const Style = @import("../layout/tree/Style.zig");
+const Tree = @import("../tree/Tree.zig");
+const Node = @import("../tree/Node.zig");
+const Style = @import("../tree/Style.zig");
 const styles = @import("styles.zig");
 const NodeId = Node.NodeId;
 

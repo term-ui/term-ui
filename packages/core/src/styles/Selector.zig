@@ -1,6 +1,6 @@
 const std = @import("std");
-const Node = @import("../layout/tree/Node.zig");
-const Tree = @import("../layout/tree/Tree.zig");
+const Node = @import("../tree/Node.zig");
+const Tree = @import("../tree/Tree.zig");
 const NodeId = Node.NodeId;
 
 /// The type of selector for matching elements
