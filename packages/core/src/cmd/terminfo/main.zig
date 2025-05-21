@@ -228,7 +228,7 @@ test {
 }
 
 test "basic" {
-    var file = try std.fs.openFileAbsolute("/Applications/Ghostty.app/Contents/Resources/terminfo/78/xterm-ghostty", .{});
+    var file = try std.fs.cwd().openFile("src/cmd/test-data/xterm-ghostty", .{});
     defer file.close();
     const term_info = try TermInfo.initFromFile(std.testing.allocator, file);
     defer term_info.deinit();
