@@ -610,7 +610,7 @@ const num_capabilities = @typeInfo(Capability).@"enum".fields.len;
 
 test "string capabilities" {
     const TermInfo = @import("main.zig").TermInfo;
-    var file = try std.fs.openFileAbsolute("/Applications/Ghostty.app/Contents/Resources/terminfo/78/xterm-ghostty", .{});
+    var file = try std.fs.cwd().openFile("src/cmd/test-data/xterm-ghostty", .{});
 
     defer file.close();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
