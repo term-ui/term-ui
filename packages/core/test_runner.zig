@@ -41,8 +41,8 @@ pub fn main() !void {
 
     const printer = Printer.init();
     // clear screen
-    printer.fmt("\x1b[H\x1b[2J", .{});
-    printer.fmt("\r\x1b[0K", .{}); // beginning of line and clear to end of line
+    // printer.fmt("\x1b[H\x1b[2J", .{});
+    // printer.fmt("\r\x1b[0K", .{}); // beginning of line and clear to end of line
 
     for (builtin.test_functions) |t| {
         if (isSetup(t)) {
