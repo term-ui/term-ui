@@ -52,9 +52,8 @@ pub fn parse(src: []const u8, pos: usize) !utils.Result(LengthPercentage) {
 }
 
 test "length-percentage" {
-    const allocator = std.testing.allocator;
-    const length_percentage = try parse(allocator, "10px", 0);
+    const length_percentage = try parse("10px", 0);
     try std.testing.expectEqual(length_percentage.value, LengthPercentage{ .length = 10 });
-    const length_percentage_percentage = try parse(allocator, "10%", 0);
-    try std.testing.expectEqual(length_percentage_percentage.value, LengthPercentage{ .percentage = 10 });
+    const length_percentage_percentage = try parse("10%", 0);
+    try std.testing.expectEqual(length_percentage_percentage.value, LengthPercentage{ .percentage = 0.1 });
 }

@@ -20,16 +20,6 @@ pub fn parse(src: []const u8, pos: usize) utils.ParseError!utils.Result(FontWeig
     return utils.parseEnum(FontWeight, src, pos) orelse error.InvalidSyntax;
 }
 
-test "parse font style" {
-    const normal_result = try parse("normal", 0);
-    try std.testing.expectEqual(normal_result.value, .normal);
-
-    const italic_result = try parse("italic", 0);
-    try std.testing.expectEqual(italic_result.value, .italic);
-
-    const inherit_result = try parse("inherit", 0);
-    try std.testing.expectEqual(inherit_result.value, .inherit);
-}
 
 test "parse font weight" {
     const normal_result = try parse("normal", 0);

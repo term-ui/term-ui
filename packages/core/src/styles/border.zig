@@ -1123,7 +1123,7 @@ test "encode-decode" {
 
     {
         const border = BoxChar{
-            .w = BoxChar.Cell{ .weight = .double, .style = .dashed_half },
+            .w = BoxChar.Cell{ .weight = .heavy, .style = .dashed_half },
             .e = BoxChar.Cell{ .weight = .light, .style = .solid },
         };
         const encoded = border.encode();
@@ -1133,8 +1133,8 @@ test "encode-decode" {
 
     {
         const border = BoxChar{
-            .n = BoxChar.Cell{ .weight = .double, .style = .dashed_triple },
-            .s = BoxChar.Cell{ .weight = .double, .style = .dashed_triple },
+            .n = BoxChar.Cell{ .weight = .heavy, .style = .dashed_triple },
+            .s = BoxChar.Cell{ .weight = .heavy, .style = .dashed_triple },
         };
         const encoded = border.encode();
         const decoded = BoxChar.decode(encoded);
@@ -1169,7 +1169,7 @@ test "encode-decode" {
         const border = BoxChar{
             .n = BoxChar.Cell{ .weight = .light, .style = .none },
             .e = BoxChar.Cell{ .weight = .heavy, .style = .solid },
-            .s = BoxChar.Cell{ .weight = .double, .style = .dashed_half },
+            .s = BoxChar.Cell{ .weight = .heavy, .style = .dashed_half },
             .w = BoxChar.Cell{ .weight = .light, .style = .solid },
         };
         const encoded = border.encode();
@@ -1179,8 +1179,8 @@ test "encode-decode" {
 
     {
         const border = BoxChar{
-            .n = BoxChar.Cell{ .weight = .double, .style = .solid },
-            .w = BoxChar.Cell{ .weight = .double, .style = .solid },
+            .n = BoxChar.Cell{ .weight = .heavy, .style = .solid },
+            .w = BoxChar.Cell{ .weight = .heavy, .style = .solid },
         };
         const encoded = border.encode();
         const decoded = BoxChar.decode(encoded);
@@ -1207,7 +1207,7 @@ test "encode-decode" {
     {
         const border = BoxChar{
             .n = BoxChar.Cell{ .weight = .light, .style = .dashed_triple },
-            .e = BoxChar.Cell{ .weight = .double, .style = .solid },
+            .e = BoxChar.Cell{ .weight = .heavy, .style = .solid },
             .s = BoxChar.Cell{ .weight = .heavy, .style = .solid },
             .w = BoxChar.Cell{ .weight = .light, .style = .dashed_double },
         };

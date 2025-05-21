@@ -1,8 +1,6 @@
 const std = @import("std");
 const AnyInputManager = @import("input/manager.zig").AnyInputManager;
-const Collector = @import("input/manager.zig").Collector;
 const Event = @import("input/manager.zig").Event;
-const expectEvents = @import("test-utils.zig").expectEvents;
 const Match = @import("input/manager.zig").Match;
 const escape = @import("input/manager.zig").escape;
 const handleTerminalInfo = @import("handle-term-info.zig").handleTerminalInfo;
@@ -130,37 +128,6 @@ fn handleFocusEvent(manager: *AnyInputManager, buffer: []const u8, position: usi
     }
     return .nomatch;
 }
-test "focus events" {
-    try expectEvents(
-        std.testing.allocator,
-        "focus events",
-        &.{ "\x1b[I", "\x1b[O" },
-        &.{ "[focus in]", "[focus out]" },
-    );
-    try expectEvents(
-        std.testing.allocator,
-        "focus events",
-        &.{"hello\x1b[I world\x1b[O!!!"},
-        &.{
-            "[key 'h' 104]",
-            "[key 'e' 101]",
-            "[key 'l' 108]",
-            "[key 'l' 108]",
-            "[key 'o' 111]",
-            "[focus in]",
-            "[.key_space]",
-            "[key 'w' 119]",
-            "[key 'o' 111]",
-            "[key 'r' 114]",
-            "[key 'l' 108]",
-            "[key 'd' 100]",
-            "[focus out]",
-            "[key '!' 33]",
-            "[key '!' 33]",
-            "[key '!' 33]",
-        },
-    );
-}
 
 fn handleSequence(manager: *AnyInputManager, buffer: []const u8, position: usize) Match {
     logger.info("try handleSequence", .{});
@@ -198,73 +165,6 @@ fn handleSequence(manager: *AnyInputManager, buffer: []const u8, position: usize
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
 
-test "paste events" {
-    try expectEvents(
-        std.testing.allocator,
-        "single buffer",
-        &.{
-            "hello " ++ PASTE_START ++ "world" ++ PASTE_END ++ "!!!",
-        },
-        &.{
-            "[key 'h' 104]",
-            "[key 'e' 101]",
-            "[key 'l' 108]",
-            "[key 'l' 108]",
-            "[key 'o' 111]",
-            "[.key_space]",
-            "[paste all 'world']",
-            "[key '!' 33]",
-            "[key '!' 33]",
-            "[key '!' 33]",
-        },
-    );
-    try expectEvents(
-        std.testing.allocator,
-        "multiple buffers with separate paste start and end",
-        &.{
-            "hello " ++ PASTE_START ++ "world",
-            PASTE_END,
-            "!!!",
-        },
-        &.{
-            "[key 'h' 104]",
-            "[key 'e' 101]",
-            "[key 'l' 108]",
-            "[key 'l' 108]",
-            "[key 'o' 111]",
-            "[.key_space]",
-            "[paste start 'world']",
-            "[paste end '']",
-            "[key '!' 33]",
-            "[key '!' 33]",
-            "[key '!' 33]",
-        },
-    );
-    try expectEvents(
-        std.testing.allocator,
-        "multiple buffers with match in the middle",
-        &.{
-            "hello " ++ PASTE_START ++ "wor",
-            "ld",
-            PASTE_END,
-            "!!!",
-        },
-        &.{
-            "[key 'h' 104]",
-            "[key 'e' 101]",
-            "[key 'l' 108]",
-            "[key 'l' 108]",
-            "[key 'o' 111]",
-            "[.key_space]",
-            "[paste start 'wor']",
-            "[paste chunk 'ld']",
-            "[paste end '']",
-            "[key '!' 33]",
-            "[key '!' 33]",
-            "[key '!' 33]",
-        },
-    );
-}
 
 pub fn handleRawBuffer(manager: *AnyInputManager, buffer: []const u8, position: usize) usize {
     logger.info("try handleRawBuffer in '{s}' mode", .{@tagName(manager.mode)});

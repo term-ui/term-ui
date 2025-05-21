@@ -299,7 +299,7 @@ test "rendertree" {
     );
     defer renderer.deinit();
 
-    try computeLayout(tree, allocator, .{
+    try computeLayout(&tree, allocator, .{
         .x = .{
             .definite = 50,
         },

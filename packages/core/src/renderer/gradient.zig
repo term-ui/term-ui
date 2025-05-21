@@ -803,9 +803,7 @@ test "samplegradient" {
     //         },
     //         .{ .solid = color },
     //     );
-    // }
     const radial_gradient = try styles.radial_gradient.parse(
-        allocator,
         "radial-gradient(circle farthest-side ,rgba(0, 19, 34, 0.92),rgb(0, 19, 34))",
         0,
     );
