@@ -112,11 +112,83 @@ pub const LineBox = struct {
     }
 };
 
+fn writeDocRef(writer: std.io.AnyWriter, ref: DocRef) !void {
+    switch (ref) {
+        .anonymous => try writer.writeAll("anon"),
+        .doc_node => |id| try writer.print("doc #{d}", .{id}),
+    }
+}
+
+fn getChildren(node: *LayoutNode) []const LayoutNode.Id {
+    return switch (node.data) {
+        .inline_node => |*n| n.children.items,
+        .block_container_node => |*n| n.children.items,
+        .inline_container_node => |*n| n.children.items,
+        else => &[_]LayoutNode.Id{},
+    };
+}
+
+fn printNodeInternal(self: *Self, node_id: LayoutNode.Id, writer: std.io.AnyWriter, prefix: []const u8, is_root: bool, is_last: bool) !void {
+    const node = self.getNodePtr(node_id);
+
+    if (!is_root) {
+        try writer.writeAll(prefix);
+        if (is_last)
+            try writer.writeAll("└── ")
+        else
+            try writer.writeAll("├── ");
+    }
+
+    switch (node.data) {
+        .text_node => |text| {
+            if (is_root) {
+                // root has no prefix
+            }
+            try writer.print("[{s} #{d}] \"{s}\"", .{ @tagName(node.data), node.id, text.contents.items });
+        },
+        .inline_node => |inline_node| {
+            try writer.print("[{s} #{d} atomic={s} ref=", .{ @tagName(node.data), node.id, if (inline_node.is_atomic) "true" else "false" });
+            try writeDocRef(writer, inline_node.ref);
+            try writer.print(" children={d}]", .{ inline_node.children.items.len });
+        },
+        .block_container_node => |block| {
+            try writer.print("[{s} #{d} ref=", .{ @tagName(node.data), node.id });
+            try writeDocRef(writer, block.ref);
+            try writer.print(" children={d}]", .{ block.children.items.len });
+        },
+        .inline_container_node => |container| {
+            try writer.print("[{s} #{d} ref=", .{ @tagName(node.data), node.id });
+            try writeDocRef(writer, container.ref);
+            try writer.print(" children={d} lines={d}]", .{ container.children.items.len, container.line_boxes.items.len });
+        },
+    }
+
+    try writer.writeByte('\n');
+
+    var new_prefix_buf: [256]u8 = undefined;
+    var new_prefix_len: usize = 0;
+    if (!is_root) {
+        std.mem.copyForwards(u8, new_prefix_buf[0..prefix.len], prefix);
+        new_prefix_len = prefix.len + 4;
+        if (is_last) {
+            std.mem.copyForwards(u8, new_prefix_buf[prefix.len..prefix.len + 4], "    ");
+        } else {
+            std.mem.copyForwards(u8, new_prefix_buf[prefix.len..prefix.len + 4], "│   ");
+        }
+    } else {
+        new_prefix_len = 0;
+    }
+    const new_prefix = new_prefix_buf[0..new_prefix_len];
+
+    const children = getChildren(node);
+    for (children, 0..) |child, idx| {
+        const last_child = idx == children.len - 1;
+        try self.printNodeInternal(child, writer, new_prefix, false, last_child);
+    }
+}
+
 pub fn printNode(self: *Self, node_id: LayoutNode.Id, writer: std.io.AnyWriter) !void {
-    _ = self; // autofix
-    _ = node_id; // autofix
-    _ = writer; // autofix
-    // TODO: Implement
+    try self.printNodeInternal(node_id, writer, "", true, true);
 }
 pub fn printRoot(self: *Self, writer: std.io.AnyWriter) !void {
     try self.printNode(0, writer);
@@ -132,5 +204,5 @@ test "LayoutTree" {
     const writer = buf.writer().any();
     try tree.printRoot(writer);
 
-    try std.testing.expectEqualStrings(buf.items, "");
+    try std.testing.expectEqualStrings(buf.items, "[text_node #0] \"Hello World\"\n");
 }
