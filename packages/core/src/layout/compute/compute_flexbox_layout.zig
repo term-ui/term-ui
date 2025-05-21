@@ -1,9 +1,9 @@
-const Tree = @import("../tree/Tree.zig");
+const Tree = @import("../../tree/Tree.zig");
 const std = @import("std");
 const with = @import("../utils/comptime.zig").with;
-pub const Style = @import("../tree/Style.zig");
+pub const Style = @import("../../tree/Style.zig");
 const styles = @import("../../styles/styles.zig");
-const Node = @import("../tree/Node.zig");
+const Node = @import("../../tree/Node.zig");
 const Maybe = @import("../utils/Maybe.zig");
 const ComputeConstants = @import("compute_constants.zig");
 const Iter = @import("../utils/Iter.zig");

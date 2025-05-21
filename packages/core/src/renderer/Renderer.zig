@@ -5,15 +5,15 @@ const PointU32 = Point(u32);
 const Color = @import("../colors/Color.zig");
 
 const Canvas = @import("Canvas.zig");
-const Tree = @import("../layout/tree/Tree.zig");
-const NodeId = @import("../layout/tree/Node.zig").NodeId;
-const Style = @import("../layout/tree/Style.zig");
+const Tree = @import("../tree/Tree.zig");
+const NodeId = @import("../tree/Node.zig").NodeId;
+const Style = @import("../tree/Style.zig");
 const ComputedText = @import("../layout/compute/text/ComputedText.zig");
 const debug = @import("../debug.zig");
-const Selection = @import("../layout/tree/Selection.zig");
+const Selection = @import("../tree/Selection.zig");
 const logger = std.log.scoped(.renderer);
-const NodeIterator = @import("../layout/tree/NodeIterator.zig");
-const BoundaryPoint = @import("../layout/tree/BoundaryPoint.zig");
+const NodeIterator = @import("../tree/NodeIterator.zig");
+const BoundaryPoint = @import("../tree/BoundaryPoint.zig");
 const computeLayout = @import("../layout/compute/compute_layout.zig").computeLayout;
 
 canvas: Canvas,

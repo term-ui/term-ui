@@ -3,7 +3,7 @@ const ConcreteTypeOf = @import("utils/comptime.zig").ConcreteTypeOf;
 const MemberType = @import("utils/comptime.zig").MemberType;
 const Maybe = @import("utils/Maybe.zig");
 const Rect = @import("rect.zig").Rect;
-const Style = @import("tree/Style.zig");
+const Style = @import("../tree/Style.zig");
 const styles = @import("../styles/styles.zig");
 const expect = std.testing.expect;
 

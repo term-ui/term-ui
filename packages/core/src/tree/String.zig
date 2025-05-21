@@ -1,5 +1,5 @@
 const std = @import("std");
-const visible = @import("../../uni/string-width.zig").visible;
+const visible = @import("../uni/string-width.zig").visible;
 
 bytes: std.ArrayListUnmanaged(u8) = .{},
 line_breaks: ?std.ArrayListUnmanaged(usize) = .{},

@@ -1,7 +1,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
-const Layout = @import("../tree/Layout.zig");
-const Style = @import("../tree/Style.zig");
+const Layout = @import("../../tree/Layout.zig");
+const Style = @import("../../tree/Style.zig");
 const test_allocator = std.testing.allocator;
 pub fn dumpStruct(st: anytype) void {
     std.debug.print("[{s}]\n", .{@typeName(@TypeOf(st))});

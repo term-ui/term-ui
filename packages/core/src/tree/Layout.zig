@@ -1,5 +1,5 @@
-const Point = @import("../point.zig").Point;
-const Rect = @import("../rect.zig").Rect;
+const Point = @import("../layout/point.zig").Point;
+const Rect = @import("../layout/rect.zig").Rect;
 const std = @import("std");
 
 const Layout = @This();

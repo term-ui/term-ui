@@ -1,14 +1,14 @@
 const std = @import("std");
-const Point = @import("../point.zig").Point;
-const Rect = @import("../rect.zig").Rect;
-const utils = @import("../utils/comptime.zig");
+const Point = @import("../layout/point.zig").Point;
+const Rect = @import("../layout/rect.zig").Rect;
+const utils = @import("../layout/utils/comptime.zig");
 const isOptional = utils.isOptional;
 const MemberType = utils.MemberType;
-const Color = @import("../../colors/Color.zig");
+const Color = @import("../colors/Color.zig");
 const expect = std.testing.expect;
 const Styles = @This();
 const Node = @import("Node.zig");
-pub const styles = @import("../../styles/styles.zig");
+pub const styles = @import("../styles/styles.zig");
 
 // pub fn init(allocator: std.mem.Allocator) Styles {
 //     return .{

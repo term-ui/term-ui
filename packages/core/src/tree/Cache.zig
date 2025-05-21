@@ -1,7 +1,7 @@
-const LayoutOutput = @import("../compute/compute_constants.zig").LayoutOutput;
-const RunMode = @import("../compute/compute_constants.zig").RunMode;
-const AvailableSpace = @import("../compute/compute_constants.zig").AvailableSpace;
-const Point = @import("../point.zig").Point;
+const LayoutOutput = @import("../layout/compute/compute_constants.zig").LayoutOutput;
+const RunMode = @import("../layout/compute/compute_constants.zig").RunMode;
+const AvailableSpace = @import("../layout/compute/compute_constants.zig").AvailableSpace;
+const Point = @import("../layout/point.zig").Point;
 const Cache = @This();
 
 fn CacheEntry(comptime T: type) type {

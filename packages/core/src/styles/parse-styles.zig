@@ -1,6 +1,6 @@
-const Tree = @import("../layout/tree/Tree.zig");
-const Style = @import("../layout/tree/Style.zig");
-const Node = @import("../layout/tree/Node.zig");
+const Tree = @import("../tree/Tree.zig");
+const Style = @import("../tree/Style.zig");
+const Node = @import("../tree/Node.zig");
 const parsers = @import("./styles.zig");
 const logger = std.log.scoped(.parse_styles);
 

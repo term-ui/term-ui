@@ -1,5 +1,5 @@
 const std = @import("std");
-const Node = @import("../../tree/Node.zig");
+const Node = @import("../../../tree/Node.zig");
 const Array = std.ArrayList;
 const Point = @import("../../point.zig").Point;
 const LayoutOutput = @import("../compute_constants.zig").LayoutOutput;
@@ -7,9 +7,9 @@ const AvailableSpace = @import("../compute_constants.zig").AvailableSpace;
 const SizingMode = @import("../compute_constants.zig").SizingMode;
 const LineBox = @import("../../line.zig").LineBox;
 
-const Tree = @import("../../tree/Tree.zig");
+const Tree = @import("../../../tree/Tree.zig");
 const LayoutInput = @import("../compute_constants.zig").LayoutInput;
-const Style = @import("../../tree/Style.zig");
+const Style = @import("../../../tree/Style.zig");
 const ComputedText = @import("./ComputedText.zig");
 const Segment = ComputedText.Segment;
 const TextPart = ComputedText.TextPart;
