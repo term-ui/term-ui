@@ -15,7 +15,7 @@ pub fn parse(src: []const u8, pos: usize) !utils.Result(Length) {
 test "length" {
     const length = try parse("10px", 0);
     try std.testing.expectEqual(length.value, 10);
-    const rect_length = try utils.parseRectShorthand("10px 20px 30px 40px", 0, parse);
+    const rect_length = try utils.parseRectShorthand(Length, "10px 20px 30px 40px", 0, parse);
     try std.testing.expectEqual(rect_length.value.top, 10);
     try std.testing.expectEqual(rect_length.value.right, 20);
     try std.testing.expectEqual(rect_length.value.bottom, 30);

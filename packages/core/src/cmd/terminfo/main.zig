@@ -226,14 +226,3 @@ pub const Names = struct {
 test {
     std.testing.refAllDeclsRecursive(@This());
 }
-
-test "basic" {
-    var file = try std.fs.openFileAbsolute("/Applications/Ghostty.app/Contents/Resources/terminfo/78/xterm-ghostty", .{});
-    defer file.close();
-    const term_info = try TermInfo.initFromFile(std.testing.allocator, file);
-    defer term_info.deinit();
-    // var iter = term_info.strings.iter();
-    // while (iter.next()) |item| {
-    //     std.debug.print("item: {s} = {any}\n", .{ @tagName(item.capability), item.value });
-    // }
-}

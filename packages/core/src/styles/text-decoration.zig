@@ -131,30 +131,26 @@ pub fn parse(src: []const u8, pos: usize) utils.ParseError!utils.Result(TextDeco
 }
 
 test "parse text decoration line" {
-    const allocator = std.testing.allocator;
-
-    const none_result = try parseTextDecorationLine(allocator, "none", 0);
+    const none_result = try parseTextDecorationLine("none", 0);
     try std.testing.expectEqual(none_result.value, .none);
 
-    const underline_result = try parseTextDecorationLine(allocator, "underline", 0);
+    const underline_result = try parseTextDecorationLine("underline", 0);
     try std.testing.expectEqual(underline_result.value, .underline);
 
-    const line_through_result = try parseTextDecorationLine(allocator, "line_through", 0);
+    const line_through_result = try parseTextDecorationLine("line-through", 0);
     try std.testing.expectEqual(line_through_result.value, .line_through);
 
-    const inherit_result = try parseTextDecorationLine(allocator, "inherit", 0);
+    const inherit_result = try parseTextDecorationLine("inherit", 0);
     try std.testing.expectEqual(inherit_result.value, .inherit);
 }
 
 test "parse text decoration" {
-    const allocator = std.testing.allocator;
-
-    const simple_result = try parse(allocator, "underline", 0);
+    const simple_result = try parse("underline", 0);
     try std.testing.expectEqual(simple_result.value.line, .underline);
     try std.testing.expect(simple_result.value.color == null);
     try std.testing.expectEqual(simple_result.value.thickness, 1.0);
 
-    const with_color_result = try parse(allocator, "wavy red", 0);
+    const with_color_result = try parse("wavy red", 0);
     try std.testing.expectEqual(with_color_result.value.line, .wavy);
     try std.testing.expect(with_color_result.value.color != null);
     if (with_color_result.value.color) |color| {
@@ -163,7 +159,7 @@ test "parse text decoration" {
         try std.testing.expectEqual(color.b, 0.0);
     }
 
-    const full_result = try parse(allocator, "underline #00ff00 2.5", 0);
+    const full_result = try parse("underline #00ff00 2.5", 0);
     try std.testing.expectEqual(full_result.value.line, .underline);
     try std.testing.expect(full_result.value.color != null);
     if (full_result.value.color) |color| {

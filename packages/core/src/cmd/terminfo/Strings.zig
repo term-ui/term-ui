@@ -608,17 +608,6 @@ pub const Capability = enum(u16) {
 
 const num_capabilities = @typeInfo(Capability).@"enum".fields.len;
 
-test "string capabilities" {
-    const TermInfo = @import("main.zig").TermInfo;
-    var file = try std.fs.openFileAbsolute("/Applications/Ghostty.app/Contents/Resources/terminfo/78/xterm-ghostty", .{});
-
-    defer file.close();
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const term_info = try TermInfo.initFromFile(arena.allocator(), file);
-    defer term_info.deinit();
-}
-
 pub const ParameterKind = enum {
     integer,
     string,
