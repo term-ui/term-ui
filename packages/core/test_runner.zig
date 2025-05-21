@@ -260,10 +260,15 @@ const Env = struct {
     filter: ?[]const u8,
 
     fn init(allocator: Allocator) Env {
+        var filter: ?[]const u8 = null;
+        if (readEnv(allocator, "TEST_FILTER")) |rf| {
+            filter = std.mem.replaceOwned(u8, allocator, rf, "%20", " ") catch @panic("OOM");
+            allocator.free(rf);
+        }
         return .{
             .verbose = readEnvBool(allocator, "TEST_VERBOSE", true),
             .fail_first = readEnvBool(allocator, "TEST_FAIL_FIRST", false),
-            .filter = readEnv(allocator, "TEST_FILTER"),
+            .filter = filter,
         };
     }
 
