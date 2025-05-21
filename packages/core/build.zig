@@ -134,7 +134,13 @@ pub fn build(b: *std.Build) !void {
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
     _ = run_lib_unit_tests; // autofix
+
     const test_filter = b.option([]const u8, "test-filter", "Skip tests that do not match filter");
+
+    var escaped_filter: ?[]const u8 = null;
+    if (test_filter) |filter| {
+        escaped_filter = try std.mem.replaceOwned(u8, b.allocator, filter, " ", "%20");
+    }
 
     const exe_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/wasm.zig"),
@@ -143,7 +149,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         // .filters = test_filters,
-        .filter = test_filter,
+        .filter = escaped_filter,
         .test_runner = .{
             .path = b.path("test_runner.zig"),
             .mode = .simple,
