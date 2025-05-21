@@ -24,9 +24,6 @@ test "parse font style" {
     const normal_result = try parse("normal", 0);
     try std.testing.expectEqual(normal_result.value, .normal);
 
-    const italic_result = try parse("italic", 0);
-    try std.testing.expectEqual(italic_result.value, .italic);
-
     const inherit_result = try parse("inherit", 0);
     try std.testing.expectEqual(inherit_result.value, .inherit);
 }

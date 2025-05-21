@@ -90,12 +90,14 @@ fn handleRawChar(manager: *AnyInputManager, buffer: []const u8, position: usize)
     logger.info("try handleRawChar", .{});
     logger.info("[BUFFER]: {s}", .{buffer});
     var cursor: usize = position;
+
     var iter = std.unicode.Utf8Iterator{
         .bytes = buffer,
         .i = cursor,
     };
-    while (iter.nextCodepoint()) |codepoint| {
-        if (codepoint == ESC) {
+    while (iter.i < buffer.len) {
+        const byte = buffer[iter.i];
+        if (byte == ESC) {
             if (manager.modeIs(.force)) {
                 manager.emitNamed(.escape, .press, 0, buffer[cursor .. cursor + 1]);
                 cursor += 1;
@@ -105,6 +107,7 @@ fn handleRawChar(manager: *AnyInputManager, buffer: []const u8, position: usize)
                 break;
             }
         }
+        const codepoint = iter.nextCodepoint() orelse break;
         manager.emitInterpretedCodepoint(codepoint, 0, buffer[cursor..iter.i]);
         cursor = iter.i;
     }
@@ -148,7 +151,7 @@ test "focus events" {
             "[key 'l' 108]",
             "[key 'o' 111]",
             "[focus in]",
-            "[.key_space]",
+            "[key .space ' ' 32]",
             "[key 'w' 119]",
             "[key 'o' 111]",
             "[key 'r' 114]",
@@ -211,7 +214,7 @@ test "paste events" {
             "[key 'l' 108]",
             "[key 'l' 108]",
             "[key 'o' 111]",
-            "[.key_space]",
+            "[key .space ' ' 32]",
             "[paste all 'world']",
             "[key '!' 33]",
             "[key '!' 33]",
@@ -232,7 +235,7 @@ test "paste events" {
             "[key 'l' 108]",
             "[key 'l' 108]",
             "[key 'o' 111]",
-            "[.key_space]",
+            "[key .space ' ' 32]",
             "[paste start 'world']",
             "[paste end '']",
             "[key '!' 33]",
@@ -255,7 +258,7 @@ test "paste events" {
             "[key 'l' 108]",
             "[key 'l' 108]",
             "[key 'o' 111]",
-            "[.key_space]",
+            "[key .space ' ' 32]",
             "[paste start 'wor']",
             "[paste chunk 'ld']",
             "[paste end '']",
@@ -287,15 +290,12 @@ pub fn handleRawBuffer(manager: *AnyInputManager, buffer: []const u8, position: 
     }
     while (cursor < buffer.len) {
         const current_cursor = cursor;
-        // defer {
 
-        // }
         {
             const match = handleRawChar(manager, buffer, cursor);
             switch (match) {
                 .nomatch => {},
                 .match => |consumed| {
-                    // std.debug.print("consumed: {}\n", .{consumed});
                     cursor += consumed;
                     continue;
                 },
@@ -343,12 +343,4 @@ pub fn handleRawBuffer(manager: *AnyInputManager, buffer: []const u8, position: 
         }
     }
     return cursor - position;
-}
-
-test "input" {
-    // // std.debug.print("hello\n", .{});
-    // var manager = InputManager{};
-    // const buf = "hello\n\t\r" ++ "\x1b[I" ++ "\x1b[O";
-    // const consumed = handleRawBuffer(&manager, buf, 0);
-    // std.debug.print("consumed: {}\n", .{consumed});
 }

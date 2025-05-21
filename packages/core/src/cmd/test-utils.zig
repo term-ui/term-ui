@@ -1,5 +1,6 @@
 const std = @import("std");
-const Collector = @import("input/manager.zig").Collector;
+const InputManager = @import("input/manager.zig").AnyInputManager;
+const Event = @import("input/manager.zig").Event;
 const TermInfoHandler = @import("handle-term-info.zig");
 const handleRawBuffer = @import("input.zig").handleRawBuffer;
 const TermInfo = @import("terminfo/main.zig").TermInfo;
@@ -13,23 +14,40 @@ fn readTermInfo(allocator: std.mem.Allocator, comptime name: []const u8) !TermIn
     var iter = term_info.strings.iter();
     var handler = TermInfoHandler.init(allocator);
     while (iter.next()) |item| {
-        // std.debug.print("inserting {s} ", .{@tagName(item.capability)});
-        // try escape(std.io.getStdErr().writer().any(), item.value);
-        // std.debug.print("\n", .{});
         try handler.trie.insert(item.value, item.capability);
     }
     return handler;
 }
 
+const Collector = struct {
+    event_str: std.ArrayList(Event),
+    pub fn emitEventFn(ptr: *anyopaque, event: Event) void {
+        var self: *Collector = @ptrCast(@alignCast(ptr));
+        self.event_str.append(event) catch unreachable;
+    }
+    pub fn deinit(self: *Collector) void {
+        self.event_str.deinit();
+    }
+};
 pub fn expectEvents(allocator: std.mem.Allocator, case: []const u8, buffers: []const []const u8, expected: []const []const u8) !void {
-    var collector = Collector.init(allocator);
+    var input_manager: InputManager = .{
+        .allocator = allocator,
+    };
+
+    defer input_manager.deinit();
+    var collector = Collector{
+        .event_str = std.ArrayList(Event).init(allocator),
+    };
+    try input_manager.subscribe(.{
+        .context = &collector,
+        .emitFn = Collector.emitEventFn,
+    });
     defer collector.deinit();
-    var manager = collector.manager().any();
+
     var term_info = try readTermInfo(allocator, "xterm-ghostty");
-    // var term_info = TermInfoHandler.init(allocator);
 
     defer term_info.deinit();
-    manager.term_info_driver = &term_info;
+    input_manager.term_info_driver = &term_info;
 
     var actual_str = std.ArrayList(u8).init(allocator);
     defer actual_str.deinit();
@@ -44,15 +62,14 @@ pub fn expectEvents(allocator: std.mem.Allocator, case: []const u8, buffers: []c
     for (buffers) |buf| {
         try buffered.appendSlice(buf);
         const consumed = handleRawBuffer(
-            &manager,
+            &input_manager,
             buffered.items,
             position,
         );
-        std.debug.print("consumed {d} ~ {d} of {d}\n", .{ position, position + consumed, buffered.items.len });
         position += consumed;
     }
 
-    for (collector.events.items) |event| {
+    for (collector.event_str.items) |event| {
         try actual_str_writer.print("{}\n", .{event});
     }
     for (expected) |exp| {

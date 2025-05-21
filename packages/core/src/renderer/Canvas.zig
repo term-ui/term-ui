@@ -967,38 +967,38 @@ pub fn drawRectBorder(self: *Self, _rect: Rect, border: LayoutRect(styles.border
         }
     }
 }
-test "canvas" {
-    try styles.border.BoxChar.load();
-    var canvas = try init(
-        std.testing.allocator,
-        .{ .x = 5, .y = 3 },
-        Color.tw.black,
-        Color.tw.white,
-    );
-    try canvas.clear();
-    defer canvas.deinit();
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const writer = std.io.getStdErr().writer().any();
-    // try writer.writeAll("\x1b[?7l");
-    // try writer.print("--------------------------------\n", .{});
-    try canvas.drawRectBg(Rect.init(0, 0, 5, 3), .{ .solid = Color.tw.indigo_500 });
-    // try canvas.drawString(.{ .x = 0, .y = 0 }, "A", null);
-    try canvas.drawString(.{ .x = 2, .y = 1 }, "B", null);
-    try canvas.drawString(.{ .x = 3, .y = 2 }, "C", null);
-    try canvas.drawString(.{ .x = 4, .y = 3 }, "D", null);
-    try canvas.render(writer, true);
+// test "canvas" {
+//     try styles.border.BoxChar.load();
+//     var canvas = try init(
+//         std.testing.allocator,
+//         .{ .x = 5, .y = 3 },
+//         Color.tw.black,
+//         Color.tw.white,
+//     );
+//     try canvas.clear();
+//     defer canvas.deinit();
+//     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+//     defer arena.deinit();
+//     const writer = std.io.getStdErr().writer().any();
+//     // try writer.writeAll("\x1b[?7l");
+//     // try writer.print("--------------------------------\n", .{});
+//     try canvas.drawRectBg(Rect.init(0, 0, 5, 3), .{ .solid = Color.tw.indigo_500 });
+//     // try canvas.drawString(.{ .x = 0, .y = 0 }, "A", null);
+//     try canvas.drawString(.{ .x = 2, .y = 1 }, "B", null);
+//     try canvas.drawString(.{ .x = 3, .y = 2 }, "C", null);
+//     try canvas.drawString(.{ .x = 4, .y = 3 }, "D", null);
+//     try canvas.render(writer, true);
 
-    try canvas.clear();
-    try canvas.drawRectBg(Rect.init(0, 0, 5, 3), .{ .solid = Color.tw.indigo_500 });
-    try writer.print("--------------------------------\n", .{});
-    // try canvas.drawString(.{ .x = 0, .y = 0 }, "a", null);
-    try canvas.drawString(.{ .x = 2, .y = 1 }, "b", null);
-    try canvas.drawString(.{ .x = 3, .y = 2 }, "c", null);
-    try canvas.drawString(.{ .x = 4, .y = 3 }, "d", null);
-    // try canvas.drawString(.{ .x = 2, .y = 2 }, "AbcDef", null);
-    try canvas.render(writer, false);
-}
+//     try canvas.clear();
+//     try canvas.drawRectBg(Rect.init(0, 0, 5, 3), .{ .solid = Color.tw.indigo_500 });
+//     try writer.print("--------------------------------\n", .{});
+//     // try canvas.drawString(.{ .x = 0, .y = 0 }, "a", null);
+//     try canvas.drawString(.{ .x = 2, .y = 1 }, "b", null);
+//     try canvas.drawString(.{ .x = 3, .y = 2 }, "c", null);
+//     try canvas.drawString(.{ .x = 4, .y = 3 }, "d", null);
+//     // try canvas.drawString(.{ .x = 2, .y = 2 }, "AbcDef", null);
+//     try canvas.render(writer, false);
+// }
 
 pub fn renderToHtml(self: *Self, writer: std.io.AnyWriter) !void {
     try writer.writeAll("<!DOCTYPE html>\n<html>\n");

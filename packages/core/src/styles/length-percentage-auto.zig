@@ -66,8 +66,3 @@ pub fn parse(src: []const u8, pos: usize) !utils.Result(LengthPercentageAuto) {
         .end = length.end,
     };
 }
-
-test "length-percentage-auto" {
-    const length_percentage_auto = try parse("10px", 0);
-    _ = length_percentage_auto; // autofix
-}

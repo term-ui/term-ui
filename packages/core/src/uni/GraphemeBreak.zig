@@ -1,3 +1,4 @@
+/// this code was adapted from https://codeberg.org/atman/zg/src/commit/0b05141b033043c5f7bcd72048a48eef6531ea6c/src/Graphemes.zig
 const std = @import("std");
 const mem = std.mem;
 const unicode = std.unicode;

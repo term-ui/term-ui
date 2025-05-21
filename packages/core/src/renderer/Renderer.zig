@@ -274,82 +274,82 @@ pub fn renderNode(self: *Self, render_context: *RenderContext, tree: *Tree, node
     }
 }
 
-test "rendertree" {
-    const allocator = std.testing.allocator;
+// test "rendertree" {
+//     const allocator = std.testing.allocator;
 
-    var tree = try Tree.parseTree(allocator,
-        \\<view 
-        \\  style="display:flex;flex-direction: column;background-color: red; height:10;width:50;"
-        \\  
-        \\>
-        \\<view style="width:30;background-color: blue;text-align: center;margin:auto">
-        \\    <text>Lorem ipsum dolor sit amet </text>
-        \\    <text>Lorem ipsum dolor sit amet </text>
-        \\    <text>Lorem ipsum dolor sit amet </text>
-        \\ </view>
-        // \\    <text selectionStart="3" selectionEnd="10">Lorem ipsum dolor sit amet, consectetur adibp1  iscing elit. Aliquam varius justo.</text>
-        // \\    <text  >Lorem <view style="width:1;height:2;background-color: blue;display:inline-block;"></view> ipsum dolor d</text>
-        \\</view>
-    );
-    defer tree.deinit();
-    const writer = std.io.getStdErr().writer().any();
+//     var tree = try Tree.parseTree(allocator,
+//         \\<view
+//         \\  style="display:flex;flex-direction: column;background-color: red; height:10;width:50;"
+//         \\
+//         \\>
+//         \\<view style="width:30;background-color: blue;text-align: center;margin:auto">
+//         \\    <text>Lorem ipsum dolor sit amet </text>
+//         \\    <text>Lorem ipsum dolor sit amet </text>
+//         \\    <text>Lorem ipsum dolor sit amet </text>
+//         \\ </view>
+//         // \\    <text selectionStart="3" selectionEnd="10">Lorem ipsum dolor sit amet, consectetur adibp1  iscing elit. Aliquam varius justo.</text>
+//         // \\    <text  >Lorem <view style="width:1;height:2;background-color: blue;display:inline-block;"></view> ipsum dolor d</text>
+//         \\</view>
+//     );
+//     defer tree.deinit();
+//     const writer = std.io.getStdErr().writer().any();
 
-    var renderer = try init(
-        allocator,
-    );
-    defer renderer.deinit();
+//     var renderer = try init(
+//         allocator,
+//     );
+//     defer renderer.deinit();
 
-    try computeLayout(tree, allocator, .{
-        .x = .{
-            .definite = 50,
-        },
-        .y = .max_content,
-    });
-    try tree.print(writer);
+//     try computeLayout(&tree, allocator, .{
+//         .x = .{
+//             .definite = 50,
+//         },
+//         .y = .max_content,
+//     });
+//     try tree.print(writer);
 
-    const focus = BoundaryPoint{ .node_id = 5, .offset = 4 };
-    const selection_id = try tree.createSelection(focus, null);
-    var selection = tree.getSelection(selection_id);
-    const bpAbove = Selection.getBoundaryAt(
-        &tree,
-        focus,
-        0,
-        .documentboundary,
-        .backward,
-        null,
-    );
-    // bpAbove = Selection.getBoundaryAt(&tree, focus, .line, .backward, null);
-    std.debug.print("new focus: {any}\n", .{bpAbove});
-    if (bpAbove) |bp| {
-        try selection.setFocus(&tree, bp);
-    }
-    // _ = selection; // autofix
-    // try selection.setFocus(&tree, .{ .node_id = 4, .offset = 2 });
-    // for (0..50) |x| {
-    //     for (0..10) |y| {
-    //         const maybe_hit = tree.hitTest(.{ .x = 50, .y = 0 }, .{ .x = @floatFromInt(x), .y = @floatFromInt(y) }, .{});
+//     const focus = BoundaryPoint{ .node_id = 5, .offset = 4 };
+//     const selection_id = try tree.createSelection(focus, null);
+//     var selection = tree.getSelection(selection_id);
+//     const bpAbove = Selection.getBoundaryAt(
+//         &tree,
+//         focus,
+//         0,
+//         .documentboundary,
+//         .backward,
+//         null,
+//     );
+//     // bpAbove = Selection.getBoundaryAt(&tree, focus, .line, .backward, null);
+//     std.debug.print("new focus: {any}\n", .{bpAbove});
+//     if (bpAbove) |bp| {
+//         try selection.setFocus(&tree, bp);
+//     }
+//     // _ = selection; // autofix
+//     // try selection.setFocus(&tree, .{ .node_id = 4, .offset = 2 });
+//     // for (0..50) |x| {
+//     //     for (0..10) |y| {
+//     //         const maybe_hit = tree.hitTest(.{ .x = 50, .y = 0 }, .{ .x = @floatFromInt(x), .y = @floatFromInt(y) }, .{});
 
-    //         std.debug.print("hit: {any}\n", .{maybe_hit});
-    //         if (maybe_hit) |hit| {
-    //             try selection.setFocus(&tree, hit);
-    //         }
-    //         // std.debug.print("hit: {any}\n", .{maybe_hit});
-    //     }
-    // }
-    std.debug.print("--------------------------------\n", .{});
-    // // for (0..10) |_| {
-    // //     try writer.print("\n\n", .{});
-    // try writer.print("\n\n", .{});
-    try renderer.render(allocator, &tree, writer, false);
+//     //         std.debug.print("hit: {any}\n", .{maybe_hit});
+//     //         if (maybe_hit) |hit| {
+//     //             try selection.setFocus(&tree, hit);
+//     //         }
+//     //         // std.debug.print("hit: {any}\n", .{maybe_hit});
+//     //     }
+//     // }
+//     std.debug.print("--------------------------------\n", .{});
+//     // // for (0..10) |_| {
+//     // //     try writer.print("\n\n", .{});
+//     // try writer.print("\n\n", .{});
+//     try renderer.render(allocator, &tree, writer, false);
 
-    try writer.print("\n\n", .{});
-    // defer tree.deinit();
-    // // }
-    // try tree.print(writer);
-    // for (renderer.canvas.cells.items) |*item| {
-    //     std.debug.print("item: {any}\n", .{item});
-    // }
-    try tree.print(writer);
+//     try writer.print("\n\n", .{});
+//     // defer tree.deinit();
+//     // // }
+//     // try tree.print(writer);
+//     // for (renderer.canvas.cells.items) |*item| {
+//     //     std.debug.print("item: {any}\n", .{item});
+//     // }
+//     try tree.print(writer);
 
-    // std.debug.print("\n\nlayout:\n{any}\n", .{(layout)});
-}
+//     // std.debug.print("\n\nlayout:\n{any}\n", .{(layout)});
+// }

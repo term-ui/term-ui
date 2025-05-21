@@ -765,5 +765,5 @@ pub const visible = struct {
 };
 test "string-width" {
     const width = visible.width.exclude_ansi_colors.utf8("\x1b[31m😂️️️️️️\x1b[0m");
-    std.debug.print("width: {}\n", .{width});
+    try std.testing.expectEqual(width, 2);
 }

@@ -95,6 +95,7 @@ test "Layout.toString" {
         .content_size = .{ .x = 0, .y = 0 },
         .scrollbar_size = .{ .x = 0, .y = 0 },
         .border = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
+        .margin = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
         .padding = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 },
     };
     _ = layout; // autofix

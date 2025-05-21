@@ -90,9 +90,11 @@ pub fn replaceData(self: *Self, tree: *Tree, offset: u32, count: u32, data: []co
 pub fn updateRangesAfterReplace(self: *Self, tree: *Tree, offset: u32, count: u32, new_data_length: usize) void {
     // Get the node's ID for comparison
     const node_id = self.id;
+    var iter = tree.live_ranges.iterator();
 
     // Iterate through all live ranges in the tree
-    for (tree.live_ranges.items) |*range| {
+    while (iter.next()) |entry| {
+        var range = entry.value_ptr;
         // Step 8: Update start points in the affected range
         if (range.start.node_id == node_id and range.start.offset > offset and range.start.offset <= offset + count) {
             range.start.offset = offset;

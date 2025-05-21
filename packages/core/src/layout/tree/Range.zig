@@ -193,7 +193,7 @@ fn deleteBetweenOffsets(self: *Self, tree: *Tree, node_id: Node.NodeId, start_of
         },
         else => {
             for (node.children.items[start_offset..end_offset]) |child_id| {
-                tree.removeChild(node_id, child_id);
+                try tree.removeChild(node_id, child_id);
             }
             // try node.children.replaceRange(tree.allocator, start_offset, end_offset - start_offset, &[_]Node.NodeId{});
         },
@@ -351,7 +351,7 @@ pub fn deleteContents(self: *Self, tree: *Tree) !void {
 
     // Step 8: Remove each node in nodes to remove
     for (nodes_to_remove.keys()) |node_id| {
-        tree.removeNode(node_id);
+        try tree.removeNode(node_id);
     }
 
     // Step 9: If original end node is a CharacterData node
@@ -438,7 +438,7 @@ pub fn insertNode(self: *Self, tree: *Tree, node_id: Node.NodeId) !void {
 
     // 9.  If node's [parent](#concept-tree-parent) is non-null, then [remove](#concept-node-remove) node.
     if (tree.getParent(node_id) != null) {
-        tree.removeNode(node_id);
+        try tree.removeNode(node_id);
     }
 
     // 10.  Let newOffset be parent's [length](#concept-node-length) if referenceNode is null; otherwise referenceNode's [index](#concept-tree-index).
@@ -460,7 +460,7 @@ pub fn insertNode(self: *Self, tree: *Tree, node_id: Node.NodeId) !void {
     // }
 
     // 12.  [Pre-insert](#concept-node-pre-insert) node into parent before referenceNode.
-    _ = try tree.insertBefore(node_id, parent, reference_node);
+    _ = try tree.insertBefore(parent, node_id, reference_node);
 
     // 13.  If range is [collapsed](#range-collapsed), then set range's [end](#concept-range-end) to (parent, newOffset).
     if (self.isCollapsed()) {
@@ -531,24 +531,25 @@ test "insertNode" {
         defer tree.deinit();
         const root = try tree.createNode(); // Represents <P>
         const text = try tree.createTextNode("Abcd efgh XY blah ijkl");
-        try tree.appendChild(root, text);
+        _ = try tree.appendChild(root, text);
 
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = text,
             .offset = 11, // Position of Y
         }, .{
             .node_id = text,
             .offset = 19, // Position after i
         });
+        var range = tree.getLiveRange(range_id);
 
-        try range.testRange(&tree, root, "<0><1>'Abcd efgh X[Y blah i]jkl'</1></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'Abcd efgh X[Y blah i]jkl'</text#1></element#0>");
 
         // Insert before X (at position 10)
         const insert_text = try tree.createTextNode("inserted text");
         try range.setStart(&tree, text, 10); // Position before 'X'
         try range.insertNode(&tree, insert_text);
 
-        try range.testRange(&tree, root, "<0><1>'Abcd efgh ['</1><2>'inserted text'</2><3>'XY blah i]jkl'</3></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'Abcd efgh ['</text#1><text#2>'inserted text'</text#2><text#3>'XY blah i]jkl'</text#3></element#0>");
     }
 
     // Test 2: Insert at start of range (after X)
@@ -557,20 +558,21 @@ test "insertNode" {
         defer tree.deinit();
         const root = try tree.createNode();
         const text = try tree.createTextNode("Abcd efgh XY blah ijkl");
-        try tree.appendChild(root, text);
+        _ = try tree.appendChild(root, text);
 
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = text,
             .offset = 11, // Position of Y (start of range)
         }, .{
             .node_id = text,
             .offset = 19, // Position after i (end of range)
         });
+        var range = tree.getLiveRange(range_id);
 
         const insert_text = try tree.createTextNode("inserted text");
         try range.insertNode(&tree, insert_text);
 
-        try range.testRange(&tree, root, "<0><1>'Abcd efgh X['</1><2>'inserted text'</2><3>'Y blah i]jkl'</3></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'Abcd efgh X['</text#1><text#2>'inserted text'</text#2><text#3>'Y blah i]jkl'</text#3></element#0>");
     }
 
     // Test 3: Insert after Y
@@ -579,73 +581,23 @@ test "insertNode" {
         defer tree.deinit();
         const root = try tree.createNode();
         const text = try tree.createTextNode("Abcd efgh XY blah ijkl");
-        try tree.appendChild(root, text);
+        _ = try tree.appendChild(root, text);
 
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = text,
             .offset = 11, // Position of Y
         }, .{
             .node_id = text,
             .offset = 19, // Position after i
         });
+        var range = tree.getLiveRange(range_id);
 
         try range.setStart(&tree, text, 12); // Position after 'Y'
         const insert_text = try tree.createTextNode("inserted text");
         try range.insertNode(&tree, insert_text);
 
-        try range.testRange(&tree, root, "<0><1>'Abcd efgh XY['</1><2>'inserted text'</2><3>' blah i]jkl'</3></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'Abcd efgh XY['</text#1><text#2>'inserted text'</text#2><text#3>' blah i]jkl'</text#3></element#0>");
     }
-
-    // // Test 4: Insert after h in "blah"
-    // {
-    //     var tree = try Tree.init(std.testing.allocator);
-    //     defer tree.deinit();
-    //     const root = try tree.createNode();
-    //     const text = try tree.createTextNode("Abcd efgh XY blah ijkl");
-    //     try tree.appendChild(root, text);
-
-    //     var range = try tree.createLiveRange(.{
-    //         .node_id = text,
-    //         .offset = 11, // Position of Y
-    //     }, .{
-    //         .node_id = text,
-    //         .offset = 18, // Position after i
-    //     });
-
-    //     try range.setStart(&tree, text, 16); // Position after 'h' in "blah"
-    //     const insert_text = try tree.createTextNode("inserted text");
-    //     try range.insertNode(&tree, insert_text);
-
-    //     try range.testRange(&tree, root, "<0><1>'Abcd efgh XY blah[inserted text i]jkl'</1></0>");
-    // }
-
-    // // Test with a more complex tree structure
-    // {
-    //     var tree = try Tree.init(std.testing.allocator);
-    //     defer tree.deinit();
-    //     const root = try tree.createNode();
-    //     const parent = try tree.createNode();
-    //     const child1 = try tree.createTextNode("Child one");
-    //     const child2 = try tree.createTextNode("Child two");
-    //     try tree.appendChild(root, parent);
-    //     try tree.appendChild(parent, child1);
-    //     try tree.appendChild(parent, child2);
-
-    //     var range = try tree.createLiveRange(.{
-    //         .node_id = child1,
-    //         .offset = 6, // "Child [one"
-    //     }, .{
-    //         .node_id = child2,
-    //         .offset = 0,
-    //     });
-
-    //     try range.testRange(&tree, root, "<0><1><2>'Child [one'</2><3>]'Child two'</3></1></0>");
-
-    //     const inserted = try tree.createTextNode("Inserted");
-    //     try range.insertNode(&tree, inserted);
-
-    //     try range.testRange(&tree, root, "<0><1><2>'Child [Insertedone'</2><3>]'Child two'</3></1></0>");
-    // }
 }
 pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
     _ = fmt;
@@ -788,18 +740,18 @@ test "Self setStart" {
     const root = try tree.createNode();
     const child_a = try tree.createNode();
     const child_b = try tree.createNode();
-    try tree.appendChild(root, child_a);
-    try tree.appendChild(root, child_b);
+    _ = try tree.appendChild(root, child_a);
+    _ = try tree.appendChild(root, child_b);
     const text_a_a = try tree.createTextNode("First text node");
     const text_a_b = try tree.createTextNode("Second text node");
-    try tree.appendChild(child_a, text_a_a);
-    try tree.appendChild(child_a, text_a_b);
+    _ = try tree.appendChild(child_a, text_a_a);
+    _ = try tree.appendChild(child_a, text_a_b);
     const text_b_a = try tree.createTextNode("Third text node");
-    try tree.appendChild(child_b, text_b_a);
+    _ = try tree.appendChild(child_b, text_b_a);
 
     {
         // Siblings
-        var range = Self{};
+        var range = Self{ .id = 0 };
         try range.setStart(&tree, child_a, 0);
         try range.setEnd(&tree, child_a, 1);
         try std.testing.expectEqual(range.start.node_id, child_a);
@@ -809,7 +761,7 @@ test "Self setStart" {
     }
     {
         // Siblings, end before start (should collapse to end when setEnd is called second)
-        var range = Self{};
+        var range = Self{ .id = 0 };
         try range.setStart(&tree, child_a, 1);
         try range.setEnd(&tree, child_a, 0);
         try std.testing.expectEqual(range.start.node_id, child_a);
@@ -818,7 +770,7 @@ test "Self setStart" {
     }
     {
         // Siblings, end before start (should collapse to start when setEnd was called first)
-        var range = Self{};
+        var range = Self{ .id = 0 };
         try range.setEnd(&tree, child_a, 0);
         try range.setStart(&tree, child_a, 1);
         try std.testing.expectEqual(range.start.node_id, child_a);
@@ -827,7 +779,7 @@ test "Self setStart" {
     }
     {
         // Siblings, ancestor start, descendant end
-        var range = Self{};
+        var range = Self{ .id = 0 };
         try range.setStart(&tree, root, 0);
         try range.setEnd(&tree, child_a, 1);
         try std.testing.expectEqual(range.start.node_id, root);
@@ -1029,17 +981,18 @@ test "deleteContents" {
         const hello = "Hello";
         const world = ", world!";
         const text = try tree.createTextNode(hello ++ world);
-        try tree.appendChild(root, text);
-        var range = try tree.createLiveRange(.{
+        _ = try tree.appendChild(root, text);
+        const range_id = try tree.createLiveRange(.{
             .node_id = text,
             .offset = hello.len,
         }, .{
             .node_id = text,
             .offset = hello.len + world.len,
         });
-        try range.testRange(&tree, root, "<0><1>'Hello[, world!]'</1></0>");
+        var range = tree.getLiveRange(range_id);
+        try range.testRange(&tree, root, "<element#0><text#1>'Hello[, world!]'</text#1></element#0>");
         try range.deleteContents(&tree);
-        try range.testRange(&tree, root, "<0><1>'Hello|'</1></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'Hello|'</text#1></element#0>");
     }
 
     // Test 2: Delete across multiple nodes
@@ -1051,22 +1004,23 @@ test "deleteContents" {
         const node1 = try tree.createTextNode("First node");
         const node2 = try tree.createTextNode("Second node");
         const node3 = try tree.createTextNode("Third node");
-        try tree.appendChild(root, node1);
-        try tree.appendChild(root, node2);
-        try tree.appendChild(root, node3);
+        _ = try tree.appendChild(root, node1);
+        _ = try tree.appendChild(root, node2);
+        _ = try tree.appendChild(root, node3);
 
         // Delete from middle of first node to middle of third node
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = node1,
             .offset = 6, // "First [node"
         }, .{
             .node_id = node3,
             .offset = 5, // "Third" ]
         });
+        var range = tree.getLiveRange(range_id);
 
-        try range.testRange(&tree, root, "<0><1>'First [node'</1><2>'Second node'</2><3>'Third] node'</3></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'First [node'</text#1><text#2>'Second node'</text#2><text#3>'Third] node'</text#3></element#0>");
         try range.deleteContents(&tree);
-        try range.testRange(&tree, root, "<0><1>'First '</1>|<3>' node'</3></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'First '</text#1>|<text#3>' node'</text#3></element#0>");
     }
 
     // Test 3: Delete where start node is ancestor of end node
@@ -1077,22 +1031,22 @@ test "deleteContents" {
         const parent = try tree.createNode();
         const child1 = try tree.createTextNode("Child one");
         const child2 = try tree.createTextNode("Child two");
-        try tree.appendChild(root, parent);
-        try tree.appendChild(parent, child1);
-        try tree.appendChild(parent, child2);
+        _ = try tree.appendChild(root, parent);
+        _ = try tree.appendChild(parent, child1);
+        _ = try tree.appendChild(parent, child2);
 
         // Delete from parent (after child1) to middle of child2
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = parent,
             .offset = 1, // After child1
         }, .{
             .node_id = child2,
             .offset = 5, // "Child" ]
         });
-
-        try range.testRange(&tree, root, "<0><1><2>'Child one'</2>[<3>'Child] two'</3></1></0>");
+        var range = tree.getLiveRange(range_id);
+        try range.testRange(&tree, root, "<element#0><element#1><text#2>'Child one'</text#2>[<text#3>'Child] two'</text#3></element#1></element#0>");
         try range.deleteContents(&tree);
-        try range.testRange(&tree, root, "<0><1><2>'Child one'</2>|<3>' two'</3></1></0>");
+        try range.testRange(&tree, root, "<element#0><element#1><text#2>'Child one'</text#2>|<text#3>' two'</text#3></element#1></element#0>");
     }
 
     // Test 4: Delete where end node is ancestor of start node
@@ -1103,22 +1057,22 @@ test "deleteContents" {
         const parent = try tree.createNode();
         const child1 = try tree.createTextNode("Child one");
         const child2 = try tree.createTextNode("Child two");
-        try tree.appendChild(root, parent);
-        try tree.appendChild(parent, child1);
-        try tree.appendChild(parent, child2);
+        _ = try tree.appendChild(root, parent);
+        _ = try tree.appendChild(parent, child1);
+        _ = try tree.appendChild(parent, child2);
 
         // Delete from middle of child1 to parent (after child1)
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = child1,
             .offset = 6, // "Child " [one
         }, .{
             .node_id = parent,
             .offset = 2, // After child1 and child2
         });
-
-        try range.testRange(&tree, root, "<0><1><2>'Child [one'</2><3>'Child two'</3></1>]</0>");
+        var range = tree.getLiveRange(range_id);
+        try range.testRange(&tree, root, "<element#0><element#1><text#2>'Child [one'</text#2><text#3>'Child two'</text#3></element#1>]</element#0>");
         try range.deleteContents(&tree);
-        try range.testRange(&tree, root, "<0><1><2>'Child '</2>|</1></0>");
+        try range.testRange(&tree, root, "<element#0><element#1><text#2>'Child '</text#2>|</element#1></element#0>");
     }
 
     // Test 5: Complex case with nodes in different branches
@@ -1130,22 +1084,23 @@ test "deleteContents" {
         const branch2 = try tree.createNode();
         const leaf1 = try tree.createTextNode("Leaf one");
         const leaf2 = try tree.createTextNode("Leaf two");
-        try tree.appendChild(root, branch1);
-        try tree.appendChild(root, branch2);
-        try tree.appendChild(branch1, leaf1);
-        try tree.appendChild(branch2, leaf2);
+        _ = try tree.appendChild(root, branch1);
+        _ = try tree.appendChild(root, branch2);
+        _ = try tree.appendChild(branch1, leaf1);
+        _ = try tree.appendChild(branch2, leaf2);
 
         // Delete from middle of leaf1 to middle of leaf2
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = leaf1,
             .offset = 5, // "Leaf " [one
         }, .{
             .node_id = leaf2,
             .offset = 5, // "Leaf " [two
         });
-        try range.testRange(&tree, root, "<0><1><3>'Leaf [one'</3></1><2><4>'Leaf ]two'</4></2></0>");
+        var range = tree.getLiveRange(range_id);
+        try range.testRange(&tree, root, "<element#0><element#1><text#3>'Leaf [one'</text#3></element#1><element#2><text#4>'Leaf ]two'</text#4></element#2></element#0>");
         try range.deleteContents(&tree);
-        try range.testRange(&tree, root, "<0><1><3>'Leaf '</3></1>|<2><4>'two'</4></2></0>");
+        try range.testRange(&tree, root, "<element#0><element#1><text#3>'Leaf '</text#3></element#1>|<element#2><text#4>'two'</text#4></element#2></element#0>");
     }
 
     // Test 6: Empty range (collapsed)
@@ -1154,18 +1109,19 @@ test "deleteContents" {
         defer tree.deinit();
         const root = try tree.createNode();
         const text = try tree.createTextNode("Test text");
-        try tree.appendChild(root, text);
+        _ = try tree.appendChild(root, text);
 
         // Create collapsed range
-        var range = try tree.createLiveRange(.{
+        const range_id = try tree.createLiveRange(.{
             .node_id = text,
             .offset = 5,
         }, .{
             .node_id = text,
             .offset = 5,
         });
-        try range.testRange(&tree, root, "<0><1>'Test |text'</1></0>");
+        var range = tree.getLiveRange(range_id);
+        try range.testRange(&tree, root, "<element#0><text#1>'Test |text'</text#1></element#0>");
         try range.deleteContents(&tree);
-        try range.testRange(&tree, root, "<0><1>'Test |text'</1></0>");
+        try range.testRange(&tree, root, "<element#0><text#1>'Test |text'</text#1></element#0>");
     }
 }

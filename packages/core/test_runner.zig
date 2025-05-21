@@ -17,6 +17,7 @@ const Allocator = std.mem.Allocator;
 const BORDER = "=" ** 80;
 pub const std_options: std.Options = .{
     .fmt_max_depth = 20,
+    .log_level = .err,
 };
 // use in custom panic handler
 var current_test: ?[]const u8 = null;
@@ -39,6 +40,8 @@ pub fn main() !void {
     var leak: usize = 0;
 
     const printer = Printer.init();
+    // clear screen
+    printer.fmt("\x1b[H\x1b[2J", .{});
     printer.fmt("\r\x1b[0K", .{}); // beginning of line and clear to end of line
 
     for (builtin.test_functions) |t| {

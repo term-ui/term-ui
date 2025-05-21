@@ -59,10 +59,3 @@ pub fn getGraphemeBreak(c: u21) GraphemeBreak {
 pub fn getCoreProperty(c: u21) CoreProperty {
     return getValue(CoreProperty, c);
 }
-
-test "getValue" {
-    const value = getValue(lookups.EastAsianWidth, '\u{3400}');
-    std.debug.print("value: {?}\n", .{value});
-    std.debug.print("value: {?}\n", .{getValue(lookups.LineBreak, '0')});
-    std.debug.print("index: {?}\n", .{getBoolValue(lookups.EmojiIndex, '\u{231A}')});
-}

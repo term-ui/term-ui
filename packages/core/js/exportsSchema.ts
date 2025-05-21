@@ -208,7 +208,7 @@ export const getSchema = (
 
     Tree_insertBefore: pipe(
       function_(),
-      args(tuple([number(), number(), number()])),
+      args(tuple([number(), number(), number(), number()])),
       returns(number()),
       catchError("Tree_insertBefore"),
     ),

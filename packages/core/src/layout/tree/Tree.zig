@@ -354,7 +354,7 @@ pub fn appendChildAtIndex(self: *Self, parent_id: Node.NodeId, child_id: Node.No
     const siblings = self.getNode(parent_id).children;
     const node_at_index = if (index >= siblings.items.len) null else siblings.items[index];
 
-    return try self.insertBefore(child_id, node_at_index);
+    return try self.insertBefore(parent_id, child_id, node_at_index);
 }
 
 pub fn appendChild(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId) !Node.NodeId {
@@ -362,7 +362,7 @@ pub fn appendChild(self: *Self, parent_id: Node.NodeId, child_id: Node.NodeId) !
     // var parent = self.getNode(parent_id);
     // try parent.children.append(self.allocator, child_id);
     // self.markDirty(parent_id);
-    return try self.preInsert(child_id, parent_id, null);
+    return try self.preInsert(parent_id, child_id, null);
 }
 // Helper function to implement ensure pre-insert validity
 fn ensurePreInsertValidity(self: *Self, node: Node.NodeId, parent: Node.NodeId, child: ?Node.NodeId) !void {
@@ -395,7 +395,7 @@ fn ensurePreInsertValidity(self: *Self, node: Node.NodeId, parent: Node.NodeId, 
     // The remaining checks (5 and 6) are primarily concerned with Document nodes
     // Since you don't have Document nodes, they can be omitted
 }
-pub fn preInsert(self: *Self, node: Node.NodeId, parent: Node.NodeId, child: ?Node.NodeId) !Node.NodeId {
+pub fn preInsert(self: *Self, parent: Node.NodeId, node: Node.NodeId, child: ?Node.NodeId) !Node.NodeId {
     // 1. Ensure pre-insert validity of node into parent before child.
     try ensurePreInsertValidity(self, node, parent, child);
 
@@ -664,7 +664,7 @@ pub fn replaceChild(self: *Self, new_node_id: Node.NodeId, old_child_id: Node.No
 
     // 13. Insert each node before the reference child
     for (nodes) |node_to_insert| {
-        _ = try self.insertBefore(node_to_insert, reference_child);
+        _ = try self.insertBefore(parent_id, node_to_insert, reference_child);
         // std.debug.print("replaceChild {d} {d}\n", .{ old_child_id, new_node_id });
     }
 
@@ -688,9 +688,9 @@ test "Tree.replaceChild" {
     try tree.expectNodes(0, "<0><1></1><2></2><6></6><4></4><5></5></0>", null);
 }
 
-pub fn insertBefore(self: *Self, node: Node.NodeId, child: ?Node.NodeId) !Node.NodeId {
-    const parent = self.getNode(child orelse return error.NotFound).parent orelse return error.NotFound;
-    return try self.preInsert(node, parent, child);
+pub fn insertBefore(self: *Self, parent_id: Node.NodeId, node_id: Node.NodeId, child_id: ?Node.NodeId) !Node.NodeId {
+    // const parent = self.getNode(child orelse return error.NotFound).parent orelse return error.NotFound;
+    return try self.preInsert(parent_id, node_id, child_id);
 }
 test "Tree.insertBefore" {
     var tree = try parseTree(std.testing.allocator, "<element><text>World</text></element>");
@@ -698,7 +698,7 @@ test "Tree.insertBefore" {
     defer tree.validateTree(0, null);
     try tree.expectNodes(0, "<0><1><text#2>'World'</text#2></1></0>", null);
     const hello_node = try tree.createTextNode("Hello ");
-    _ = try tree.insertBefore(hello_node, 2);
+    _ = try tree.insertBefore(1, hello_node, 2);
     try tree.expectNodes(0, "<0><1><text#3>'Hello '</text#3><text#2>'World'</text#2></1></0>", null);
 }
 
@@ -1569,10 +1569,12 @@ pub fn splitTextNode(self: *Self, text_node_id: Node.NodeId, offset: u32) !Node.
         const next_sibling = self.nextSibling(text_node_id);
 
         // 7.1. [Insert](#concept-node-insert) new node into parent before node's [next sibling](#concept-tree-next-sibling).
-        _ = try self.insertBefore(new_node_id, parent_id, next_sibling);
+        _ = try self.insertBefore(parent_id, new_node_id, next_sibling);
 
+        var iter = self.live_ranges.iterator();
         // Live range adjustments
-        for (self.live_ranges.items) |*range| {
+        while (iter.next()) |entry| {
+            var range = entry.value_ptr;
             // 7.2. For each [live range](#concept-live-range) whose [start node](#concept-range-start-node) is node
             // and [start offset](#concept-range-start-offset) is greater than offset,
             // set its [start node](#concept-range-start-node) to new node and decrease its [start offset](#concept-range-start-offset) by offset.

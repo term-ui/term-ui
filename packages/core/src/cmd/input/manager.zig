@@ -498,9 +498,9 @@ pub const Event = struct {
                 }
                 if (key.base_codepoint != key.codepoint) {
                     if (isPrintable(key.base_codepoint)) {
-                        try fbs_writer.print(" base_cp= '{c}' {d}", .{ @as(u8, @intCast(key.base_codepoint)), key.base_codepoint });
+                        try fbs_writer.print(" base_cp='{c}' {d}", .{ @as(u8, @intCast(key.base_codepoint)), key.base_codepoint });
                     } else {
-                        try fbs_writer.print(" base_cp= '{u}' {d}", .{ key.base_codepoint, key.base_codepoint });
+                        try fbs_writer.print(" base_cp='{u}' {d}", .{ key.base_codepoint, key.base_codepoint });
                     }
                 }
                 // try fbs_writer.print("'", .{});
@@ -636,8 +636,6 @@ pub const Subscriber = struct {
     emitFn: *const fn (context: *anyopaque, event: Event) void,
 };
 pub const AnyInputManager = struct {
-    // emitFn: *const fn (context: *const anyopaque, event: Event) void,
-    // setModeFn: *const fn (context: *const anyopaque, mode: Mode) void,
     mode: Mode = .normal,
     term_info_driver: ?*TermInfo = null,
     subscribers: std.AutoHashMapUnmanaged(*anyopaque, Subscriber) = .{},
@@ -657,17 +655,13 @@ pub const AnyInputManager = struct {
 
     pub fn emit(self: *AnyInputManager, event: Event) void {
         logger.info("[EMIT] {}", .{event});
-        // const ptr: *const anyopaque = @alignCast(@ptrCast(self.context));
         var it = self.subscribers.iterator();
         while (it.next()) |entry| {
             entry.value_ptr.emitFn(entry.key_ptr.*, event);
         }
-
-        // self.emitFn(ptr, event);
     }
     pub fn setMode(self: *AnyInputManager, mode: Mode) void {
         self.mode = mode;
-        // self.setModeFn(self.context, mode);
     }
     pub fn modeIs(self: *AnyInputManager, mode: Mode) bool {
         return self.mode == mode;
@@ -676,18 +670,6 @@ pub const AnyInputManager = struct {
         return self.mode != mode;
     }
 
-    // pub fn emitKey(self: *AnyInputManager, _event: keys.Key, modifiers: u8, raw: []const u8) void {
-    //     var event = _event;
-    //     if (event.name == null) {
-    //         event.name = constants.getKeyNameFromNumber(event.codepoint);
-    //     }
-
-    //     self.emit(.{
-    //         .data = .{ .key = event },
-    //         .modifiers = modifiers,
-    //         .raw = raw,
-    //     });
-    // }
     pub fn emitFromCodepoint(self: *AnyInputManager, codepoint: u21, base_codepoint: u21, action: Event.KeyAction, modifiers: u8, raw: []const u8) void {
         var cp = codepoint;
         const unshifted = constants.getUnshifted(base_codepoint);
@@ -704,7 +686,6 @@ pub const AnyInputManager = struct {
                 .base_codepoint = unshifted,
                 .action = action,
             } },
-            // .data = .{ .key = .{ .codepoint = codepoint,  } }
             .modifiers = modifiers,
             .raw = raw,
         });
@@ -836,11 +817,7 @@ pub const AnyInputManager = struct {
 
     pub fn emitModeReport(self: *AnyInputManager, mode: u8, value1: u16, value2: u8, raw: []const u8) void {
         self.emit(.{
-            .data = .{ .mode_report = .{
-                .mode = mode,
-                .value1 = value1,
-                .value2 = value2,
-            } },
+            .data = .{ .mode_report = .{ .mode = mode, .value1 = value1, .value2 = value2 } },
             .modifiers = 0,
             .raw = raw,
         });
@@ -851,70 +828,6 @@ pub const Mode = enum {
     force,
     paste,
 };
-
-// pub fn InputManager(
-//     comptime Context: type,
-//     comptime emitFn: fn (ctx: Context, event: Event) void,
-//     comptime setModeFn: fn (ctx: Context, mode: Mode) void,
-// ) type {
-//     return struct {
-//         context: Context,
-//         mode: Mode,
-//         const Self = @This();
-
-//         pub inline fn any(self: Self) AnyInputManager {
-//             return .{
-//                 .context = @ptrCast(&self.context),
-//                 .emitFn = untypedEmitFn,
-//                 .setModeFn = untypedSetModeFn,
-//                 ._mode = self.mode,
-//             };
-//         }
-//         pub fn untypedEmitFn(context: *const anyopaque, event: Event) void {
-//             const ptr: *const Context = @alignCast(@ptrCast(context));
-//             emitFn(ptr.*, event);
-//         }
-//         pub fn untypedSetModeFn(context: *const anyopaque, mode: Mode) void {
-//             const ptr: *const Context = @alignCast(@ptrCast(context));
-//             setModeFn(ptr.*, mode);
-//         }
-//     };
-// }
-
-// collets the events into an arraylist, mostly useful for tests
-// const CollectorInputManager = InputManager(*Collector, Collector.emitEventFn);
-// pub const Collector = struct {
-//     events: std.ArrayList(Event),
-//     mode: Mode,
-//     pub inline fn init(allocator: std.mem.Allocator) @This() {
-//         return .{
-//             .events = std.ArrayList(Event).init(allocator),
-//             .mode = .normal,
-//         };
-//     }
-//     pub fn deinit(self: *@This()) void {
-//         self.events.deinit();
-//     }
-//     pub inline fn manager(self: *@This()) CollectorInputManager {
-//         return .{
-//             .context = self,
-//             .mode = self.mode,
-//         };
-//     }
-//     pub fn setMode(self: *@This(), mode: Mode) void {
-//         self.mode = mode;
-//     }
-
-//     pub fn emitEventFn(ctx: *Collector, event: Event) void {
-//         // var self: *@This() = @ptrCast(ctx);
-//         ctx.events.append(event) catch unreachable;
-//     }
-//     pub fn dump(self: *@This(), writer: std.io.AnyWriter) !void {
-//         for (self.events.items) |event| {
-//             try writer.print("{s}\n", .{event});
-//         }
-//     }
-// };
 
 pub fn MatchResult(comptime T: type) type {
     return union(enum) {

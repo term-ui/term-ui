@@ -161,8 +161,6 @@ test "NodeIterator" {
     );
 
     defer tree.deinit();
-    const writer = std.io.getStdErr().writer().any();
-    try tree.print(writer);
 
     {
         var node_iter = tree.createNodeIterator(0);
@@ -179,12 +177,6 @@ test "NodeIterator" {
             i -= 1;
 
             try std.testing.expectEqual(node_id, i);
-        }
-    }
-    {
-        var node_iter = tree.createNodeIterator(3);
-        while (node_iter.nextNode()) |node_id| {
-            std.debug.print("node_id: {d}\n", .{node_id});
         }
     }
 }

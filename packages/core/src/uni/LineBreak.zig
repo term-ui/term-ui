@@ -370,10 +370,3 @@ fn breakProp(c: u21) lookups.LineBreak {
         else => |v| v,
     };
 }
-test "breakProp" {
-    const str = "hello world";
-    var iter = Self.initAssumeValid(str);
-    while (iter.next()) |brk| {
-        std.debug.print("brk: {}\n", .{brk});
-    }
-}

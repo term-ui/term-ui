@@ -931,7 +931,7 @@ test "unicode" {
         .mods = .{
             .shift = true,
         },
-    }, "[key 'a' 97 mod='shift']");
+    }, "[key 'A' 65 base_cp='a' 97 mod='shift']");
 
     try expectKittySequence(std.testing.allocator, .{
         .key = 'a',
@@ -941,7 +941,7 @@ test "unicode" {
             .shift = true,
             .ctrl = true,
         },
-    }, "[key 'a' 97 mod='shift+ctrl']");
+    }, "[key 'A' 65 base_cp='a' 97 mod='shift+ctrl']");
 
     try expectKittySequence(std.testing.allocator, .{
         .key = 'a',

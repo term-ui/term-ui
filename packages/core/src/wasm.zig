@@ -40,7 +40,7 @@ pub fn wasmLog(
 }
 var gpa = std.heap.GeneralPurposeAllocator(.{
     .safety = true,
-    .verbose_log = true,
+    .verbose_log = false,
 }){};
 
 const wasm_allocator = blk: {
@@ -208,9 +208,9 @@ export fn Tree_appendChild(tree: *Tree, parent: u32, child: u32) u32 {
     logger.info("Tree_appendChild({*}, {d}, {d})", .{ tree, parent, child });
     return @intCast(wasm_try(Tree.Node.NodeId, tree.appendChild(parent, child)));
 }
-export fn Tree_insertBefore(tree: *Tree, child: u32, before: u32) u32 {
-    logger.info("Tree_insertBefore({*}, {d}, {d})", .{ tree, child, before });
-    return @intCast(wasm_try(Tree.Node.NodeId, tree.insertBefore(child, before)));
+export fn Tree_insertBefore(tree: *Tree, parent: u32, child: u32, before: u32) u32 {
+    logger.info("Tree_insertBefore({*}, {d}, {d}, {d})", .{ tree, parent, child, before });
+    return @intCast(wasm_try(Tree.Node.NodeId, tree.insertBefore(parent, child, before)));
 }
 export fn Tree_removeChildren(tree: *Tree, parent: u32) void {
     logger.info("Tree_removeChildren({*}, {d})", .{ tree, parent });
@@ -543,26 +543,6 @@ fn allocTestString(str: []const u8) [*:0]u8 {
     std.mem.copyForwards(u8, ptr[0..str.len], str);
     return ptr;
 }
-test "wasm" {
-    const tree = Tree_init();
-    defer Tree_deinit(tree);
-    const style_ptr = allocTestString("background-color: red;height: 10;width: 50;");
-
-    const node = Tree_createNode(tree, style_ptr);
-    const child = Tree_createNode(tree, allocTestString(
-        \\background-color: blue;
-        \\border: rounded;
-        \\margin: 1;
-        \\height: 9;
-        \\width: 4;
-    ));
-    _ = Tree_appendChild(tree, node, child);
-    Tree_computeLayout(tree, allocTestString("50"), allocTestString("10"));
-    const renderer = Renderer_init();
-    defer Renderer_deinit(renderer);
-    Renderer_renderToStdout(renderer, tree, false);
-    Tree_dump(tree);
-}
 
 test "should_set_style" {
     defer _ = gpa.detectLeaks();
@@ -597,42 +577,6 @@ test "should_set_style" {
     }
 }
 const Cursor = @import("styles/cursor.zig").Cursor;
-
-test "leak" {
-    defer _ = gpa.detectLeaks();
-    const tree = Tree_init();
-    defer Tree_deinit(tree);
-    const root = Tree_createNode(tree, allocTestString(
-        \\height: 3;
-        \\display: flex;
-        \\justify-content: center;
-        \\align-items: center;
-        \\background-color: red;
-    ));
-    const node = Tree_createTextNode(tree, allocTestString("Lorem ipsum dolor sit amet"));
-    _ = Tree_appendChild(tree, root, node);
-    // inline for (std.meta.fields(Cursor)) |field| {
-    // Tree_setStyle(tree, node, allocTestString("background-color: blue;cursor: " ++ field.name ++ ";"));
-    Tree_computeLayout(
-        tree,
-        allocTestString("100"),
-        allocTestString("3"),
-    );
-    const selection = Tree_createSelection(tree, node, 5, node, 10);
-    _ = selection; // autofix
-    const hit_test = tree.caretPositionFromPoint(
-        .{ .x = 100, .y = 3 },
-        .{ .x = 5, .y = 1 },
-    );
-    std.debug.print("hit_test: {any}\n", .{hit_test});
-    // Selection_setFocus(tree, selection, node, 1);
-    // Tree_dump(tree);
-    // const renderer = Renderer_init();
-    // defer Renderer_deinit(renderer);
-    // var writer = std.io.fixedBufferStream("");
-    // try renderer.render(wasm_allocator, tree, std.io.getStdErr().writer().any(), false);
-    // }
-}
 
 test {
     _ = @import("./layout/tree/Range.zig");

@@ -184,7 +184,7 @@ pub fn handleTerminalInfo(manager: *AnyInputManager, buffer: []const u8, positio
                     // .key_b2 => .key_b2,
                     // .key_a3 => .key_a3,
                     // .key_a1 => .key_a1,
-                    // .tab => .key_tab,
+
                     .key_backspace => .backspace,
                     .key_btab => .tab,
                     .key_down => .down,
@@ -214,9 +214,10 @@ pub fn handleTerminalInfo(manager: *AnyInputManager, buffer: []const u8, positio
                     .key_f12 => .f12,
                     .key_f13 => .f13,
 
-                    // .key_page_up => .key_page_up,
                     else => |unhandled| {
-                        std.debug.print("unhandled: {s}\n", .{@tagName(unhandled)});
+                        if (std.mem.startsWith(u8, @tagName(unhandled), "key_")) {
+                            logger.warn("unhandled key from terminfo: {s}\n", .{@tagName(unhandled)});
+                        }
                         return .nomatch;
                     },
                 };
@@ -245,7 +246,7 @@ test "term info" {
             "\x1b[1;3P",
         },
         &.{
-            "[.key_f1]",
+            "[key .f1 '' 57364]",
         },
     );
 }

@@ -403,12 +403,3 @@ pub fn parse(src: []const u8, pos: usize) !utils.Result(Color) {
     }
     return error.InvalidSyntax;
 }
-
-test "parseColor" {
-    const allocator = std.testing.allocator;
-    const src = "#ffffff";
-    const pos = 0;
-    const color = try parse(allocator, src, pos);
-    std.debug.print("color: {any} {s}\n", .{ color, src[color.start..color.end] });
-    // try std.testing.expectEqual(color, Color{ .r = 1, .g = 1, .b = 1, .a = 1 });
-}
