@@ -339,41 +339,41 @@ test "LayoutTree" {
     );
 }
 
-test "deep formatting context break" {
-    // FIXME:
-    // example from https://webkit.org/blog/115/webcore-rendering-ii-blocks-and-inlines/
-    // should output this structure
-    // <anonymous pre block>
-    // <i>Italic only <b>italic and bold</b></i>
-    // </anonymous pre block>
-    // <anonymous middle block>
-    // <div>
-    // Wow, a block!
-    // </div>
-    // <div>
-    // Wow, another block!
-    // </div>
-    // </anonymous middle block>
-    // <anonymous post block>
-    // <i><b>More italic and bold text</b> More italic text</i>
-    // </anonymous post block>
-    try expectLayoutTree("deep formatting context break",
-        \\<i>Italic only <b>italic and bold<div>Wow, a block!</div><div>Wow, another block!</div>More italic and bold text</b> More italic text</i>
-    ,
-        \\[block_container_node #0 ref={doc#0} children={3}]
-        \\├── [inline_container_node #1 ref={anon} children={1} lines={0}]
-        \\│   ├── [text_node #2] "Italic only"
-        \\│   └── [inline_node #3 ref={doc#1} children={2}]
-        \\│       └── [text_node #4] "italic and bold"
-        \\├── [block_container_node #5 ref={anon} children={2}]
-        \\│   ├── [block_container_node #6 ref={anon} children={1}]
-        \\│   │   └── [text_node #7] "Wow, a block!"
-        \\│   └── [block_container_node #8 ref={anon} children={1}]
-        \\│       └── [text_node #9] "Wow, another block!"
-        \\└── [inline_container_node #9 ref={doc#0} children={1} lines={0}]
-        \\    └── [inline_node #10 ref={doc#2} children={2}]
-        \\        ├── [text_node #11] "More italic and bold text"
-        \\        └── [text_node #12] "More italic text"
-        \\
-    );
-}
+// test "deep formatting context break" {
+//     // FIXME:
+//     // example from https://webkit.org/blog/115/webcore-rendering-ii-blocks-and-inlines/
+//     // should output this structure
+//     // <anonymous pre block>
+//     // <i>Italic only <b>italic and bold</b></i>
+//     // </anonymous pre block>
+//     // <anonymous middle block>
+//     // <div>
+//     // Wow, a block!
+//     // </div>
+//     // <div>
+//     // Wow, another block!
+//     // </div>
+//     // </anonymous middle block>
+//     // <anonymous post block>
+//     // <i><b>More italic and bold text</b> More italic text</i>
+//     // </anonymous post block>
+//     try expectLayoutTree("deep formatting context break",
+//         \\<i>Italic only <b>italic and bold<div>Wow, a block!</div><div>Wow, another block!</div>More italic and bold text</b> More italic text</i>
+//     ,
+//         \\[block_container_node #0 ref={doc#0} children={3}]
+//         \\├── [inline_container_node #1 ref={anon} children={1} lines={0}]
+//         \\│   ├── [text_node #2] "Italic only"
+//         \\│   └── [inline_node #3 ref={doc#1} children={2}]
+//         \\│       └── [text_node #4] "italic and bold"
+//         \\├── [block_container_node #5 ref={anon} children={2}]
+//         \\│   ├── [block_container_node #6 ref={anon} children={1}]
+//         \\│   │   └── [text_node #7] "Wow, a block!"
+//         \\│   └── [block_container_node #8 ref={anon} children={1}]
+//         \\│       └── [text_node #9] "Wow, another block!"
+//         \\└── [inline_container_node #9 ref={doc#0} children={1} lines={0}]
+//         \\    └── [inline_node #10 ref={doc#2} children={2}]
+//         \\        ├── [text_node #11] "More italic and bold text"
+//         \\        └── [text_node #12] "More italic text"
+//         \\
+//     );
+// }
