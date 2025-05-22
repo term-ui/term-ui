@@ -3,6 +3,7 @@ const DocNodeId = @import("../tree/Node.zig").NodeId;
 const DocTree = @import("../tree/Tree.zig");
 const Array = std.ArrayListUnmanaged;
 const HashMap = std.AutoHashMapUnmanaged;
+const docFromXml = @import("./doc-from-xml.zig").docFromXml;
 
 nodes: HashMap(LayoutNode.Id, LayoutNode) = .{},
 node_count: LayoutNode.Id = 0,
@@ -238,8 +239,8 @@ fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) !?LayoutNode.Id {
 
 fn writeDocRef(writer: std.io.AnyWriter, ref: DocRef) !void {
     switch (ref) {
-        .anonymous => try writer.writeAll("anon"),
-        .doc_node => |id| try writer.print("doc #{d}", .{id}),
+        .anonymous => try writer.writeAll("{anon}"),
+        .doc_node => |id| try writer.print("{{doc#{d}}}", .{id}),
     }
 }
 
@@ -271,19 +272,23 @@ fn printNodeInternal(self: *Self, node_id: LayoutNode.Id, writer: std.io.AnyWrit
             try writer.print("[{s} #{d}] \"{s}\"", .{ @tagName(node.data), node.id, text.contents.items });
         },
         .inline_node => |inline_node| {
-            try writer.print("[{s} #{d} atomic={s} ref=", .{ @tagName(node.data), node.id, if (inline_node.is_atomic) "true" else "false" });
+            try writer.print("[{s} #{d}", .{ @tagName(node.data), node.id });
+            if (inline_node.is_atomic) {
+                try writer.print(" atomic", .{});
+            }
+            try writer.print(" ref=", .{});
             try writeDocRef(writer, inline_node.ref);
-            try writer.print(" children={d}]", .{inline_node.children.items.len});
+            try writer.print(" children={{{d}}}]", .{inline_node.children.items.len});
         },
         .block_container_node => |block| {
             try writer.print("[{s} #{d} ref=", .{ @tagName(node.data), node.id });
             try writeDocRef(writer, block.ref);
-            try writer.print(" children={d}]", .{block.children.items.len});
+            try writer.print(" children={{{d}}}]", .{block.children.items.len});
         },
         .inline_container_node => |container| {
             try writer.print("[{s} #{d} ref=", .{ @tagName(node.data), node.id });
             try writeDocRef(writer, container.ref);
-            try writer.print(" children={d} lines={d}]", .{ container.children.items.len, container.line_boxes.items.len });
+            try writer.print(" children={{{d}}} lines={{{d}}}]", .{ container.children.items.len, container.line_boxes.items.len });
         },
     }
 
@@ -315,60 +320,48 @@ pub fn printRoot(self: *Self, writer: std.io.AnyWriter) !void {
     try self.printNode(0, writer);
 }
 
-test "LayoutTree" {
-    var tree = Self.init(std.testing.allocator);
+pub fn expectLayoutTree(description: []const u8, docXml: []const u8, expected: []const u8) !void {
+    var tree = try docFromXml(std.testing.allocator, docXml, .{});
     defer tree.deinit();
 
-    const root = try tree.createNode(.{ .block_container_node = .{ .ref = .anonymous } });
-    try std.testing.expectEqual(root, 0);
-
-    const container = try tree.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
-    const inline_node_id = try tree.createNode(.{ .inline_node = .{ .ref = .anonymous, .is_atomic = false } });
-    const text1 = try tree.createTextNode("abc");
-    const text2 = try tree.createTextNode("def");
-    const text3 = try tree.createTextNode("zzz");
-
-    try tree.appendNode(root, container);
-    try tree.appendNode(root, text3);
-    try tree.appendNode(container, inline_node_id);
-    try tree.appendNode(inline_node_id, text1);
-    try tree.appendNode(inline_node_id, text2);
+    var lt = try fromTree(std.testing.allocator, &tree);
+    defer lt.deinit();
 
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const writer = buf.writer().any();
-    try tree.printRoot(writer);
+    try lt.printRoot(writer);
+    if (std.mem.eql(u8, expected, buf.items)) {
+        std.debug.print("\x1b[32m✓\x1b[0m {s}\n", .{description});
+    } else {
+        std.debug.print("\x1b[31m✗\x1b[0m {s}\n", .{description});
+    }
 
-    const expected =
-        \\[block_container_node #0 ref=anon children=2]
-        \\├── [inline_container_node #1 ref=anon children=1 lines=0]
-        \\│   └── [inline_node #2 atomic=false ref=anon children=2]
+    try std.testing.expectEqualStrings(expected, buf.items);
+}
+test "LayoutTree" {
+    try expectLayoutTree("inline only",
+        \\<span>
+        \\  <span>
+        \\    abc
+        \\    def
+        \\  </span>
+        \\  zzz
+        \\</span>
+    ,
+        \\[block_container_node #0 ref={anon} children={2}]
+        \\├── [inline_container_node #1 ref={anon} children={1} lines={0}]
+        \\│   └── [inline_node #2 atomic={false} ref={anon} children={2}]
         \\│       ├── [text_node #3] "abc"
         \\│       └── [text_node #4] "def"
         \\└── [text_node #5] "zzz"
-        \\
-    ;
-    try std.testing.expectEqualStrings(buf.items, expected);
+    );
 }
 
 test "fromTree inline only" {
     const allocator = std.testing.allocator;
-    var doc = try DocTree.init(allocator);
+    var doc = try docFromXml(allocator, "<div><span>abc</span><span>def</span></div>", .{});
     defer doc.deinit();
-
-    const root = try doc.createNode();
-    const text_shell1 = try doc.createNode();
-    doc.getStyle(text_shell1).display = .{ .outside = .@"inline", .inside = .flow };
-    const text1 = try doc.createTextNode("abc");
-    _ = try doc.appendChild(text_shell1, text1);
-
-    const text_shell2 = try doc.createNode();
-    doc.getStyle(text_shell2).display = .{ .outside = .@"inline", .inside = .flow };
-    const text2 = try doc.createTextNode("def");
-    _ = try doc.appendChild(text_shell2, text2);
-
-    _ = try doc.appendChild(root, text_shell1);
-    _ = try doc.appendChild(root, text_shell2);
 
     var lt = try fromTree(allocator, &doc);
     defer lt.deinit();
@@ -378,13 +371,51 @@ test "fromTree inline only" {
     try lt.printRoot(buf.writer().any());
 
     const expected =
-        \\[inline_container_node #0 ref=doc #0 children=2 lines=0]
-        \\├── [inline_node #1 atomic=false ref=doc #1 children=1]
+        \\[inline_container_node #0 ref={doc#0} children={2} lines={0}]
+        \\├── [inline_node #1 ref={doc#1} children={1}]
         \\│   └── [text_node #2] "abc"
-        \\└── [inline_node #3 atomic=false ref=doc #3 children=1]
+        \\└── [inline_node #3 ref={doc#3} children={1}]
         \\    └── [text_node #4] "def"
         \\
     ;
     try std.testing.expectEqualStrings(buf.items, expected);
 }
 
+test "deep formatting context break" {
+    // FIXME:
+    // example from https://webkit.org/blog/115/webcore-rendering-ii-blocks-and-inlines/
+    // should output this structure
+    // <anonymous pre block>
+    // <i>Italic only <b>italic and bold</b></i>
+    // </anonymous pre block>
+    // <anonymous middle block>
+    // <div>
+    // Wow, a block!
+    // </div>
+    // <div>
+    // Wow, another block!
+    // </div>
+    // </anonymous middle block>
+    // <anonymous post block>
+    // <i><b>More italic and bold text</b> More italic text</i>
+    // </anonymous post block>
+    try expectLayoutTree("deep formatting context break",
+        \\<i>Italic only <b>italic and bold<div>Wow, a block!</div><div>Wow, another block!</div>More italic and bold text</b> More italic text</i>
+    ,
+        \\[block_container_node #0 ref={anon} children={2}]
+        \\├── [inline_container_node #1 ref={doc#0} children={1} lines={0}]
+        \\│   ├── [text_node #2] "Italic only "
+        \\│   └── [inline_node #3 ref={doc#1} children={2}]
+        \\│       └── [text_node #4] "italic and bold"
+        \\├── [block_container_node #5 ref={anon} children={2}]
+        \\│   ├── [block_container_node #6 ref={anon} children={1}]
+        \\│   │   └── [text_node #7] "Wow, a block!"
+        \\│   └── [block_container_node #8 ref={anon} children={1}]
+        \\│       └── [text_node #9] "Wow, another block!"
+        \\└── [inline_container_node #9 ref={doc#0} children={1} lines={0}]
+        \\    └── [inline_node #10 ref={doc#2} children={2}]
+        \\        ├── [text_node #11] "More italic and bold text"
+        \\        └── [text_node #12] "More italic text"
+        \\
+    );
+}
