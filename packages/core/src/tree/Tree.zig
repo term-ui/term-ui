@@ -19,6 +19,7 @@ const String = @import("String.zig");
 const Range = @import("Range.zig");
 pub const BoundaryPoint = @import("BoundaryPoint.zig");
 const NodeIterator = @import("NodeIterator.zig");
+const TreeWalker = @import("TreeWalker.zig");
 pub const Selection = @import("Selection.zig");
 const traversal = @import("./traversal.zig");
 const Canvas = @import("../renderer/Canvas.zig");
@@ -94,6 +95,13 @@ pub fn createNodeIterator(self: *Self, root: Node.NodeId) NodeIterator {
         .reference_node = root,
 
         .tree = self,
+    };
+}
+pub fn createTreeWalker(self: *Self, root: Node.NodeId) TreeWalker {
+    return TreeWalker{
+        .tree = self,
+        .root = root,
+        .current = root,
     };
 }
 pub fn enableInputManager(self: *Self) !void {
