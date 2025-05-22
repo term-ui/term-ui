@@ -1,5 +1,6 @@
 const std = @import("std");
 const DocNodeId = @import("../tree/Node.zig").NodeId;
+const DocTree = @import("../tree/Tree.zig");
 const Array = std.ArrayListUnmanaged;
 const HashMap = std.AutoHashMapUnmanaged;
 
@@ -122,6 +123,119 @@ pub const LineBox = struct {
     }
 };
 
+pub fn fromTree(allocator: std.mem.Allocator, tree: *DocTree) !Self {
+    var self = Self.init(allocator);
+    // Start building the layout tree at the document root.
+    _ = try self.build(tree, DocTree.ROOT_NODE_ID);
+    return self;
+}
+
+fn nodeIsInline(tree: *DocTree, node_id: DocNodeId) bool {
+    const kind = tree.getNodeKind(node_id);
+    if (kind == .text) return true;
+    return tree.getStyle(node_id).display.outside == .@"inline";
+}
+
+/// Recursively convert the DOM starting at `node_id` into layout nodes.
+/// Returns the id of the created layout node or `null` if the DOM node should
+/// not produce a layout representation.
+fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) !?LayoutNode.Id {
+    const kind = tree.getNodeKind(node_id);
+
+    // 1. Text DOM nodes map directly to layout text nodes. Empty text nodes are
+    // ignored.
+    if (kind == .text) {
+        const text = tree.getText(node_id).bytes.items;
+        if (text.len == 0) return null;
+        const id = try self.createTextNode(text);
+        return id;
+    }
+
+    const style = tree.getStyle(node_id);
+
+    // 2. Nodes with `display: none` do not participate in layout.
+    if (style.display.outside == .none) return null;
+
+    // 3. Inline-level elements produce an `InlineNode` and simply convert all of
+    //    their children.
+    if (style.display.outside == .@"inline") {
+        const id = try self.createNode(.{ .inline_node = .{ .ref = .{ .doc_node = node_id }, .is_atomic = false } });
+        for (tree.getNodeChildren(node_id)) |child| {
+            if (try self.build(tree, child)) |child_id| {
+                try self.appendNode(id, child_id);
+            }
+        }
+        return id;
+    }
+
+    const children = tree.getNodeChildren(node_id);
+    var only_inline = true;
+
+    // Determine whether every visible child is inline-level so we know what
+    // kind of container to create.
+    for (children) |child| {
+        if (!nodeIsInline(tree, child)) {
+            if (tree.getStyle(child).display.outside != .none) {
+                only_inline = false;
+                break;
+            }
+        }
+    }
+
+    if (only_inline) {
+        // 4. If all children are inline, wrap them in an `InlineContainerNode`
+        //    so they participate in the inline formatting context.
+        const id = try self.createNode(.{ .inline_container_node = .{ .ref = .{ .doc_node = node_id } } });
+        for (children) |child| {
+            if (try self.build(tree, child)) |child_id| {
+                try self.appendNode(id, child_id);
+            }
+        }
+        return id;
+    }
+
+    // 5. Otherwise we create a `BlockContainerNode` and insert anonymous inline
+    //    containers around contiguous inline children to preserve block model
+    //    invariants.
+    const container_id = try self.createNode(.{ .block_container_node = .{ .ref = .{ .doc_node = node_id } } });
+    var inline_seq: Array(LayoutNode.Id) = .{};
+    defer inline_seq.deinit(self.allocator);
+
+    for (children) |child| {
+        const child_is_inline = nodeIsInline(tree, child);
+        const maybe_child = try self.build(tree, child);
+        if (maybe_child == null) continue;
+        const l_id = maybe_child.?;
+
+        if (child_is_inline) {
+            // Accumulate inline children so they can be wrapped together.
+            try inline_seq.append(self.allocator, l_id);
+        } else {
+            // Flush any collected inline children before appending the block.
+            if (inline_seq.items.len > 0) {
+                const anon = try self.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
+                for (inline_seq.items) |iid| {
+                    try self.appendNode(anon, iid);
+                }
+                try self.appendNode(container_id, anon);
+                inline_seq.clearRetainingCapacity();
+            }
+            try self.appendNode(container_id, l_id);
+        }
+    }
+
+    // Flush trailing inline children.
+    if (inline_seq.items.len > 0) {
+        const anon = try self.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
+        for (inline_seq.items) |iid| {
+            try self.appendNode(anon, iid);
+        }
+        try self.appendNode(container_id, anon);
+    }
+
+    return container_id;
+}
+
 fn writeDocRef(writer: std.io.AnyWriter, ref: DocRef) !void {
     switch (ref) {
         .anonymous => try writer.writeAll("anon"),
@@ -236,3 +350,41 @@ test "LayoutTree" {
     ;
     try std.testing.expectEqualStrings(buf.items, expected);
 }
+
+test "fromTree inline only" {
+    const allocator = std.testing.allocator;
+    var doc = try DocTree.init(allocator);
+    defer doc.deinit();
+
+    const root = try doc.createNode();
+    const text_shell1 = try doc.createNode();
+    doc.getStyle(text_shell1).display = .{ .outside = .@"inline", .inside = .flow };
+    const text1 = try doc.createTextNode("abc");
+    _ = try doc.appendChild(text_shell1, text1);
+
+    const text_shell2 = try doc.createNode();
+    doc.getStyle(text_shell2).display = .{ .outside = .@"inline", .inside = .flow };
+    const text2 = try doc.createTextNode("def");
+    _ = try doc.appendChild(text_shell2, text2);
+
+    _ = try doc.appendChild(root, text_shell1);
+    _ = try doc.appendChild(root, text_shell2);
+
+    var lt = try fromTree(allocator, &doc);
+    defer lt.deinit();
+
+    var buf = std.ArrayList(u8).init(allocator);
+    defer buf.deinit();
+    try lt.printRoot(buf.writer().any());
+
+    const expected =
+        \\[inline_container_node #0 ref=doc #0 children=2 lines=0]
+        \\├── [inline_node #1 atomic=false ref=doc #1 children=1]
+        \\│   └── [text_node #2] "abc"
+        \\└── [inline_node #3 atomic=false ref=doc #3 children=1]
+        \\    └── [text_node #4] "def"
+        \\
+    ;
+    try std.testing.expectEqualStrings(buf.items, expected);
+}
+
