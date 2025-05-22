@@ -72,7 +72,9 @@ fn nodeFromXmlElement(tree: *Tree, element: *xml.Element, options: Options) Tree
                     var iter = std.mem.splitScalar(u8, child.char_data, '\n');
 
                     while (iter.next()) |line| {
-                        const text_node_id = try tree.createTextNode(if (options.trim_text) trimText(line) else line);
+                        const text = if (options.trim_text) trimText(line) else line;
+                        if (text.len == 0) continue;
+                        const text_node_id = try tree.createTextNode(text);
                         _ = try tree.appendChild(node_id, text_node_id);
                     }
                 } else {

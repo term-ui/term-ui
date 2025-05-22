@@ -1,6 +1,3 @@
-// The LayoutTree mirrors the DOM tree but only contains the information
-// required for layout.  This module provides a small tree of lightweight
-// nodes which can later be used by the layout and rendering passes.
 const std = @import("std");
 const DocNodeId = @import("../tree/Node.zig").NodeId;
 const DocTree = @import("../tree/Tree.zig");
@@ -8,22 +5,16 @@ const Array = std.ArrayListUnmanaged;
 const HashMap = std.AutoHashMapUnmanaged;
 const docFromXml = @import("./doc-from-xml.zig").docFromXml;
 
-// Map of all layout nodes indexed by their id.  We store nodes here so the ids
-// remain stable and small.
 nodes: HashMap(LayoutNode.Id, LayoutNode) = .{},
-// Monotonic counter used to assign new ids.
 node_count: LayoutNode.Id = 0,
-// Allocator used throughout the tree.
 allocator: std.mem.Allocator,
 
 const Self = @This();
 
 pub fn init(allocator: std.mem.Allocator) Self {
-    // Initialises an empty layout tree using the provided allocator.
     return Self{ .allocator = allocator };
 }
 pub fn deinit(self: *Self) void {
-    // Clean up all nodes stored in the tree.
     var it = self.nodes.iterator();
     while (it.next()) |entry| {
         entry.value_ptr.deinit(self.allocator);
@@ -38,7 +29,6 @@ pub fn createNode(self: *Self, data: LayoutNode.Data) !LayoutNode.Id {
     return id;
 }
 pub fn createTextNode(self: *Self, contents: []const u8) !LayoutNode.Id {
-    // Convenience helper for text nodes which also stores the text contents.
     const node_id = try self.createNode(.{ .text_node = .{} });
     var node = self.getNodePtr(node_id);
     try node.data.text_node.contents.appendSlice(self.allocator, contents);
@@ -52,31 +42,21 @@ pub fn appendNode(self: *Self, parent_id: LayoutNode.Id, child_id: LayoutNode.Id
         .inline_container_node => |*n| &n.children,
         else => return error.InvalidParent,
     };
-    // Update the appropriate child list depending on the parent type.
     try list.append(self.allocator, child_id);
 }
 pub fn getNodePtr(self: *Self, id: LayoutNode.Id) *LayoutNode {
-    // Retrieve a node pointer by id or panic if it does not exist.
     return self.nodes.getPtr(id) orelse std.debug.panic("LayoutTree: Node {d} not found", .{id});
 }
 
-/// Base node stored in the LayoutTree.  Each node is identified by a unique
-/// numeric id and tagged union containing the specific node type.
 pub const LayoutNode = struct {
-    /// Identifier used as key in the `nodes` map.
     id: Id,
-    /// Concrete node payload.
+    parent: ?Id = null,
     data: Data,
     pub const Id = u32;
-    /// Different kinds of nodes that can appear in the layout tree.
     pub const Data = union(enum) {
-        /// Simple text leaf.
         text_node: TextNode,
-        /// Represents an inline DOM element.
         inline_node: InlineNode,
-        /// Block formatting context participant with block children.
         block_container_node: BlockContainerNode,
-        /// Block container that contains only inline children.
         inline_container_node: InlineContainerNode,
     };
     pub fn deinit(self: *LayoutNode, allocator: std.mem.Allocator) void {
@@ -90,7 +70,6 @@ pub const LayoutNode = struct {
 };
 
 pub const TextNode = struct {
-    /// Raw textual contents for this node.
     contents: Array(u8) = .{},
     pub fn deinit(self: *TextNode, allocator: std.mem.Allocator) void {
         self.contents.deinit(allocator);
@@ -98,32 +77,22 @@ pub const TextNode = struct {
 };
 
 pub const InlineNode = struct {
-    /// Back reference to the originating DOM node or anonymous.
     ref: DocRef,
-    /// When true the node is treated as a single fragment.
     is_atomic: bool,
-    /// Link to the next node in the continuation chain when this inline is split.
-    continuation: ?LayoutNode.Id = null,
-    /// Layout children produced from DOM children.
     children: Array(LayoutNode.Id) = .{},
+    continuation: ?LayoutNode.Id = null,
     pub fn deinit(self: *InlineNode, allocator: std.mem.Allocator) void {
         self.children.deinit(allocator);
     }
 };
 
 pub const DocRef = union(enum) {
-    /// Layout nodes that do not correspond to a DOM node use this tag.
     anonymous,
-    /// Reference to the DOM node that created this layout node.
     doc_node: DocNodeId,
 };
 
 pub const BlockContainerNode = struct {
-    /// Originating DOM node or anonymous wrapper.
     ref: DocRef,
-    /// Optional continuation pointer used when inline flows are split by blocks.
-    continuation: ?LayoutNode.Id = null,
-    /// Block children contained inside this node.
     children: Array(LayoutNode.Id) = .{},
     pub fn deinit(self: *BlockContainerNode, allocator: std.mem.Allocator) void {
         self.children.deinit(allocator);
@@ -136,11 +105,8 @@ pub const BlockContainerNode = struct {
 /// The same as a block container, but all children are inline, which enables inline formatting context.
 /// this node also holds the LineBoxes
 pub const InlineContainerNode = struct {
-    /// Wrapper for a block formatting context that contains only inline children.
     ref: DocRef,
-    continuation: ?LayoutNode.Id = null,
     children: Array(LayoutNode.Id) = .{},
-    /// Lines produced during inline layout pass.
     line_boxes: Array(LineBox) = .{},
     pub fn deinit(self: *InlineContainerNode, allocator: std.mem.Allocator) void {
         self.children.deinit(allocator);
@@ -149,7 +115,6 @@ pub const InlineContainerNode = struct {
 };
 
 pub const LineBox = struct {
-    /// Inline fragments laid out on this line.
     fragments: Array(Fragment) = .{},
     pub const Fragment = struct {
         node: LayoutNode.Id,
@@ -162,7 +127,6 @@ pub const LineBox = struct {
 };
 
 pub fn fromTree(allocator: std.mem.Allocator, tree: *DocTree) !Self {
-    // Entry point used by tests to convert a DOM tree into a layout tree.
     var self = Self.init(allocator);
     // Start building the layout tree at the document root.
     _ = try self.build(tree, DocTree.ROOT_NODE_ID);
@@ -170,41 +134,47 @@ pub fn fromTree(allocator: std.mem.Allocator, tree: *DocTree) !Self {
 }
 
 fn nodeIsInline(tree: *DocTree, node_id: DocNodeId) bool {
-    // Helper used during tree construction to check if a DOM node is inline
-    // level and therefore should live in an inline formatting context.
     const kind = tree.getNodeKind(node_id);
     if (kind == .text) return true;
     return tree.getStyle(node_id).display.outside == .@"inline";
+}
+fn isOnlyInlineSubtree(tree: *DocTree, node_id: DocNodeId) bool {
+    const kind = tree.getNodeKind(node_id);
+    if (kind == .text) return true;
+    if (tree.getStyle(node_id).display.outside != .@"inline") return false;
+    for (tree.getNodeChildren(node_id)) |child| {
+        if (!isOnlyInlineSubtree(tree, child)) return false;
+    }
+    return true;
+}
+pub fn isDisplayNone(tree: *DocTree, node_id: DocNodeId) bool {
+    return tree.getStyle(node_id).display.outside == .none;
 }
 
 /// Recursively convert the DOM starting at `node_id` into layout nodes.
 /// Returns the id of the created layout node or `null` if the DOM node should
 /// not produce a layout representation.
-fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) !?LayoutNode.Id {
+fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) !LayoutNode.Id {
     const kind = tree.getNodeKind(node_id);
 
     // 1. Text DOM nodes map directly to layout text nodes. Empty text nodes are
     // ignored.
     if (kind == .text) {
         const text = tree.getText(node_id).bytes.items;
-        if (text.len == 0) return null;
         const id = try self.createTextNode(text);
         return id;
     }
 
     const style = tree.getStyle(node_id);
 
-    // 2. Nodes with `display: none` do not participate in layout.
-    if (style.display.outside == .none) return null;
-
     // 3. Inline-level elements produce an `InlineNode` and simply convert all of
     //    their children.
     if (style.display.outside == .@"inline") {
         const id = try self.createNode(.{ .inline_node = .{ .ref = .{ .doc_node = node_id }, .is_atomic = false } });
         for (tree.getNodeChildren(node_id)) |child| {
-            if (try self.build(tree, child)) |child_id| {
-                try self.appendNode(id, child_id);
-            }
+            if (isDisplayNone(tree, child)) continue;
+            const child_layout_node_id = try self.build(tree, child);
+            try self.appendNode(id, child_layout_node_id);
         }
         return id;
     }
@@ -215,11 +185,12 @@ fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) !?LayoutNode.Id {
     // Determine whether every visible child is inline-level so we know what
     // kind of container to create.
     for (children) |child| {
-        if (!nodeIsInline(tree, child)) {
-            if (tree.getStyle(child).display.outside != .none) {
-                only_inline = false;
-                break;
-            }
+        if (tree.getStyle(child).display.outside == .none) {
+            continue;
+        }
+        if (!isOnlyInlineSubtree(tree, child)) {
+            only_inline = false;
+            break;
         }
     }
 
@@ -228,9 +199,9 @@ fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) !?LayoutNode.Id {
         //    so they participate in the inline formatting context.
         const id = try self.createNode(.{ .inline_container_node = .{ .ref = .{ .doc_node = node_id } } });
         for (children) |child| {
-            if (try self.build(tree, child)) |child_id| {
-                try self.appendNode(id, child_id);
-            }
+            if (isDisplayNone(tree, child)) continue;
+            const child_layout_node_id = try self.build(tree, child);
+            try self.appendNode(id, child_layout_node_id);
         }
         return id;
     }
@@ -239,45 +210,7 @@ fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) !?LayoutNode.Id {
     //    containers around contiguous inline children to preserve block model
     //    invariants.
     const container_id = try self.createNode(.{ .block_container_node = .{ .ref = .{ .doc_node = node_id } } });
-    var inline_seq: Array(LayoutNode.Id) = .{};
-    defer inline_seq.deinit(self.allocator);
-
-    // Iterate over the DOM children converting them into layout nodes on the
-    // fly. Inline children are grouped so that a single anonymous wrapper can
-    // be inserted before we append any block level node.
-    for (children) |child| {
-        const child_is_inline = nodeIsInline(tree, child);
-        const maybe_child = try self.build(tree, child);
-        if (maybe_child == null) continue;
-        const l_id = maybe_child.?;
-
-        if (child_is_inline) {
-            // Accumulate inline children so they can be wrapped together.
-            try inline_seq.append(self.allocator, l_id);
-        } else {
-            // A block child terminates the current inline sequence. Wrap the
-            // accumulated inline nodes in an anonymous inline container before
-            // adding the block to the container.
-            if (inline_seq.items.len > 0) {
-                const anon = try self.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
-                for (inline_seq.items) |iid| {
-                    try self.appendNode(anon, iid);
-                }
-                try self.appendNode(container_id, anon);
-                inline_seq.clearRetainingCapacity();
-            }
-            try self.appendNode(container_id, l_id);
-        }
-    }
-
-    // Any remaining inline sequence becomes the trailing anonymous container.
-    if (inline_seq.items.len > 0) {
-        const anon = try self.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
-        for (inline_seq.items) |iid| {
-            try self.appendNode(anon, iid);
-        }
-        try self.appendNode(container_id, anon);
-    }
+    // TODO
 
     return container_id;
 }
@@ -298,7 +231,6 @@ fn getChildren(node: *LayoutNode) []const LayoutNode.Id {
     };
 }
 
-// Helper used by the test printer to render the tree structure.
 fn printNodeInternal(self: *Self, node_id: LayoutNode.Id, writer: std.io.AnyWriter, prefix: []const u8, is_root: bool, is_last: bool) !void {
     const node = self.getNodePtr(node_id);
 
@@ -321,6 +253,9 @@ fn printNodeInternal(self: *Self, node_id: LayoutNode.Id, writer: std.io.AnyWrit
             try writer.print("[{s} #{d}", .{ @tagName(node.data), node.id });
             if (inline_node.is_atomic) {
                 try writer.print(" atomic", .{});
+            }
+            if (inline_node.continuation) |continuation| {
+                try writer.print(" continuation={{#{d}}}", .{continuation});
             }
             try writer.print(" ref=", .{});
             try writeDocRef(writer, inline_node.ref);
@@ -367,8 +302,6 @@ pub fn printRoot(self: *Self, writer: std.io.AnyWriter) !void {
 }
 
 pub fn expectLayoutTree(description: []const u8, docXml: []const u8, expected: []const u8) !void {
-    // Utility used by the unit tests to compare the produced layout tree
-    // against an expected textual representation.
     var tree = try docFromXml(std.testing.allocator, docXml, .{});
     defer tree.deinit();
 
@@ -397,36 +330,13 @@ test "LayoutTree" {
         \\  zzz
         \\</span>
     ,
-        \\[block_container_node #0 ref={anon} children={2}]
-        \\├── [inline_container_node #1 ref={anon} children={1} lines={0}]
-        \\│   └── [inline_node #2 atomic={false} ref={anon} children={2}]
-        \\│       ├── [text_node #3] "abc"
-        \\│       └── [text_node #4] "def"
-        \\└── [text_node #5] "zzz"
-    );
-}
-
-test "fromTree inline only" {
-    const allocator = std.testing.allocator;
-    var doc = try docFromXml(allocator, "<div><span>abc</span><span>def</span></div>", .{});
-    defer doc.deinit();
-
-    var lt = try fromTree(allocator, &doc);
-    defer lt.deinit();
-
-    var buf = std.ArrayList(u8).init(allocator);
-    defer buf.deinit();
-    try lt.printRoot(buf.writer().any());
-
-    const expected =
         \\[inline_container_node #0 ref={doc#0} children={2} lines={0}]
-        \\├── [inline_node #1 ref={doc#1} children={1}]
-        \\│   └── [text_node #2] "abc"
-        \\└── [inline_node #3 ref={doc#3} children={1}]
-        \\    └── [text_node #4] "def"
+        \\├── [inline_node #1 ref={doc#1} children={2}]
+        \\│   ├── [text_node #2] "abc"
+        \\│   └── [text_node #3] "def"
+        \\└── [text_node #4] "zzz"
         \\
-    ;
-    try std.testing.expectEqualStrings(buf.items, expected);
+    );
 }
 
 test "deep formatting context break" {
@@ -450,9 +360,9 @@ test "deep formatting context break" {
     try expectLayoutTree("deep formatting context break",
         \\<i>Italic only <b>italic and bold<div>Wow, a block!</div><div>Wow, another block!</div>More italic and bold text</b> More italic text</i>
     ,
-        \\[block_container_node #0 ref={anon} children={2}]
-        \\├── [inline_container_node #1 ref={doc#0} children={1} lines={0}]
-        \\│   ├── [text_node #2] "Italic only "
+        \\[block_container_node #0 ref={doc#0} children={3}]
+        \\├── [inline_container_node #1 ref={anon} children={1} lines={0}]
+        \\│   ├── [text_node #2] "Italic only"
         \\│   └── [inline_node #3 ref={doc#1} children={2}]
         \\│       └── [text_node #4] "italic and bold"
         \\├── [block_container_node #5 ref={anon} children={2}]
