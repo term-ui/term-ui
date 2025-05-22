@@ -582,4 +582,6 @@ test {
     _ = @import("./tree/Range.zig");
     _ = @import("./uni/GraphemeBreak.zig");
     _ = @import("./tree/NodeIterator.zig");
+    _ = @import("./layout/LayoutTree.zig");
+    _ = @import("./layout/doc-from-xml.zig");
 }
