@@ -78,6 +78,8 @@ pub const TextNode = struct {
 pub const InlineNode = struct {
     ref: DocRef,
     is_atomic: bool,
+    continuation: ?LayoutNode.Id = null,
+    continuationof: ?LayoutNode.Id = null,
     children: Array(LayoutNode.Id) = .{},
     pub fn deinit(self: *InlineNode, allocator: std.mem.Allocator) void {
         self.children.deinit(allocator);
@@ -91,6 +93,8 @@ pub const DocRef = union(enum) {
 
 pub const BlockContainerNode = struct {
     ref: DocRef,
+    continuation: ?LayoutNode.Id = null,
+    continuationof: ?LayoutNode.Id = null,
     children: Array(LayoutNode.Id) = .{},
     pub fn deinit(self: *BlockContainerNode, allocator: std.mem.Allocator) void {
         self.children.deinit(allocator);
@@ -104,6 +108,8 @@ pub const BlockContainerNode = struct {
 /// this node also holds the LineBoxes
 pub const InlineContainerNode = struct {
     ref: DocRef,
+    continuation: ?LayoutNode.Id = null,
+    continuationof: ?LayoutNode.Id = null,
     children: Array(LayoutNode.Id) = .{},
     line_boxes: Array(LineBox) = .{},
     pub fn deinit(self: *InlineContainerNode, allocator: std.mem.Allocator) void {
