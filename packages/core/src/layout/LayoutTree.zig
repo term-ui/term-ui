@@ -1,5 +1,6 @@
 const std = @import("std");
 const DocNodeId = @import("../tree/Node.zig").NodeId;
+const DocTree = @import("../tree/Tree.zig");
 const Array = std.ArrayListUnmanaged;
 const HashMap = std.AutoHashMapUnmanaged;
 
@@ -122,6 +123,116 @@ pub const LineBox = struct {
     }
 };
 
+pub fn fromTree(allocator: std.mem.Allocator, tree: *DocTree) !Self {
+    var self = Self.init(allocator);
+    _ = try self.buildFromDom(tree, DocTree.ROOT_NODE_ID);
+    return self;
+}
+
+// Return true if the node generates an inline-level box. Text
+// nodes are always considered inline. For element nodes we look at
+// the computed display property.
+fn nodeIsInline(tree: *DocTree, node_id: DocNodeId) bool {
+    if (tree.getNodeKind(node_id) == .text) return true;
+    return tree.getComputedStyle(node_id).display.outside == .@"inline";
+}
+
+// Walk the subtree rooted at `node_id` and return true if any element
+// generates a block-level box. Nodes with `display: none` are ignored.
+fn subtreeHasBlock(tree: *DocTree, node_id: DocNodeId) bool {
+    if (tree.getNodeKind(node_id) != .text) {
+        const display = tree.getComputedStyle(node_id).display.outside;
+        if (display != .@"inline" and display != .none) return true;
+        for (tree.getNodeChildren(node_id)) |child| {
+            if (subtreeHasBlock(tree, child)) return true;
+        }
+    }
+    return false;
+}
+
+fn buildFromDom(self: *Self, tree: *DocTree, node_id: DocNodeId) !?LayoutNode.Id {
+    const kind = tree.getNodeKind(node_id);
+    if (kind == .text) {
+        const text = tree.getText(node_id).bytes.items;
+        if (text.len == 0) return null;
+        const id = try self.createTextNode(text);
+        return id;
+    }
+
+    // Fetch the computed style for the node. We use the computed
+    // version so inherited properties and cascading rules are taken
+    // into account when determining how the node should behave.
+    const style = tree.getComputedStyle(node_id);
+    if (style.display.outside == .none) return null;
+
+    if (style.display.outside == .@"inline") {
+        const id = try self.createNode(.{ .inline_node = .{ .ref = .{ .doc_node = node_id }, .is_atomic = false } });
+        for (tree.getNodeChildren(node_id)) |child| {
+            if (try self.buildFromDom(tree, child)) |child_id| {
+                try self.appendNode(id, child_id);
+            }
+        }
+        return id;
+    }
+
+    const children = tree.getNodeChildren(node_id);
+    var only_inline = true;
+    // Determine whether all descendants produce inline boxes. We use
+    // `subtreeHasBlock` so that a block at any depth forces us to
+    // create a block formatting context.
+    for (children) |child| {
+        if (subtreeHasBlock(tree, child)) {
+            only_inline = false;
+            break;
+        }
+    }
+
+    if (only_inline) {
+        const id = try self.createNode(.{ .inline_container_node = .{ .ref = .{ .doc_node = node_id } } });
+        for (children) |child| {
+            if (try self.buildFromDom(tree, child)) |child_id| {
+                try self.appendNode(id, child_id);
+            }
+        }
+        return id;
+    }
+
+    const container_id = try self.createNode(.{ .block_container_node = .{ .ref = .{ .doc_node = node_id } } });
+    var inline_seq: Array(LayoutNode.Id) = .{};
+    defer inline_seq.deinit(self.allocator);
+
+    for (children) |child| {
+        const child_is_inline = nodeIsInline(tree, child);
+        const maybe_child = try self.buildFromDom(tree, child);
+        if (maybe_child == null) continue;
+        const l_id = maybe_child.?;
+
+        if (child_is_inline) {
+            try inline_seq.append(self.allocator, l_id);
+        } else {
+            if (inline_seq.items.len > 0) {
+                const anon = try self.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
+                for (inline_seq.items) |iid| {
+                    try self.appendNode(anon, iid);
+                }
+                try self.appendNode(container_id, anon);
+                inline_seq.clearRetainingCapacity();
+            }
+            try self.appendNode(container_id, l_id);
+        }
+    }
+
+    if (inline_seq.items.len > 0) {
+        const anon = try self.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
+        for (inline_seq.items) |iid| {
+            try self.appendNode(anon, iid);
+        }
+        try self.appendNode(container_id, anon);
+    }
+
+    return container_id;
+}
+
 fn writeDocRef(writer: std.io.AnyWriter, ref: DocRef) !void {
     switch (ref) {
         .anonymous => try writer.writeAll("anon"),
@@ -236,3 +347,41 @@ test "LayoutTree" {
     ;
     try std.testing.expectEqualStrings(buf.items, expected);
 }
+
+test "fromTree inline only" {
+    const allocator = std.testing.allocator;
+    var doc = try DocTree.init(allocator);
+    defer doc.deinit();
+
+    const root = try doc.createNode();
+    const text_shell1 = try doc.createNode();
+    doc.getStyle(text_shell1).display = .{ .outside = .@"inline", .inside = .flow };
+    const text1 = try doc.createTextNode("abc");
+    _ = try doc.appendChild(text_shell1, text1);
+
+    const text_shell2 = try doc.createNode();
+    doc.getStyle(text_shell2).display = .{ .outside = .@"inline", .inside = .flow };
+    const text2 = try doc.createTextNode("def");
+    _ = try doc.appendChild(text_shell2, text2);
+
+    _ = try doc.appendChild(root, text_shell1);
+    _ = try doc.appendChild(root, text_shell2);
+
+    var lt = try fromTree(allocator, &doc);
+    defer lt.deinit();
+
+    var buf = std.ArrayList(u8).init(allocator);
+    defer buf.deinit();
+    try lt.printRoot(buf.writer().any());
+
+    const expected =
+        \\[inline_container_node #0 ref=doc #0 children=2 lines=0]
+        \\├── [inline_node #1 atomic=false ref=doc #1 children=1]
+        \\│   └── [text_node #2] "abc"
+        \\└── [inline_node #3 atomic=false ref=doc #3 children=1]
+        \\    └── [text_node #4] "def"
+        \\
+    ;
+    try std.testing.expectEqualStrings(buf.items, expected);
+}
+

@@ -62,13 +62,13 @@ pub const ComputedStyleCache = struct {
     }
     /// Get a node's computed style, calculating it if not cached
     pub fn getComputedStyle(self: *ComputedStyleCache, tree: *Tree, node_id: NodeId) Style {
-        _ = tree; // autofix
-        // Return cached style if available
+        // Return cached style if available. Until full style computation is
+        // implemented, fall back to the node's inline style when no cached
+        // entry exists so callers have something reasonable to work with.
         if (self.styles.get(node_id)) |style| {
             return style;
         }
-        std.debug.panic("computeStyle\n", .{});
-        // return try self.computeStyle(tree, node_id);
+        return tree.getStyle(node_id).*;
 
         //     // Create new style for this node
         //     var style = try self.allocator.create(Style);
