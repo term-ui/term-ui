@@ -1,6 +1,6 @@
 const std = @import("std");
-const DocNodeId = @import("../tree/Node.zig").NodeId;
-const DocTree = @import("../tree/Tree.zig");
+const DocNodeId = @import("../../tree/Node.zig").NodeId;
+const DocTree = @import("../../tree/Tree.zig");
 const Array = std.ArrayListUnmanaged;
 const HashMap = std.AutoHashMapUnmanaged;
 const docFromXml = @import("./doc-from-xml.zig").docFromXml;
@@ -244,6 +244,7 @@ const MixedContextBuilder = struct {
             }
         }
     }
+
     pub fn build(self: *MixedContextBuilder) BuildError!void {
         const children = self.doc_tree.getNodeChildren(self.root_container_id);
         for (children) |child| {
@@ -340,12 +341,11 @@ pub fn buildInsideBlock(self: *Self, tree: *DocTree, node_id: DocNodeId) !Layout
 
     const container_id = try self.createNode(.{ .block_container_node = .{ .ref = .{ .doc_node = node_id } } });
     var mixed_context_builder = try MixedContextBuilder.init(self.allocator, self, tree, container_id);
+    defer mixed_context_builder.deinit();
     try mixed_context_builder.build();
-    mixed_context_builder.deinit();
-    // try self.build(node_id);
-    // const container_id = try self.appendNode(parent_id: LayoutNode.Id, child_id: LayoutNode.Id)
     return container_id;
 }
+
 fn writeDocRef(writer: std.io.AnyWriter, ref: DocRef) !void {
     switch (ref) {
         .anonymous => try writer.writeAll("{anon}"),
@@ -482,7 +482,6 @@ test "LayoutTree" {
 }
 
 test "deep formatting context break" {
-    // FIXME:
     // example from https://webkit.org/blog/115/webcore-rendering-ii-blocks-and-inlines/
     // should output this structure
     // <anonymous pre block>

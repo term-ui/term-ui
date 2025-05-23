@@ -1,9 +1,9 @@
 // Helper functions to convert a small XML subset into the document tree used by
 // the layout tests.  The parser is intentionally simple and exists only so the
 // layout code can be tested without pulling in a full HTML parser.
-const xml = @import("../xml.zig");
+const xml = @import("../../xml.zig");
 const std = @import("std");
-const Tree = @import("../tree/Tree.zig");
+const Tree = @import("../../tree/Tree.zig");
 
 /// Simple configuration options used when converting XML into a test DOM tree.
 pub const Options = struct {
