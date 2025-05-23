@@ -1,16 +1,18 @@
 const mod = @import("mod.zig");
 const LayoutContext = mod.LayoutContext;
 const LayoutNode = mod.LayoutNode;
+const std = @import("std");
 
-available_space: AvailableSpacePoint,
-compute_mode: ComputeMode,
+const math = @import("math.zig");
+
+available_space: mod.constants.AvailableSpacePoint,
 
 /// Whether we only need to know the Node's size, or whe
 run_mode: RunMode,
 /// Whether a Node's style sizes should be taken into account or ignored
-sizing_mode: SizingMode,
+sizing_mode: mod.constants.SizingMode,
 /// Which axis we need the size of
-axis: RequestedAxis,
+axis: mod.constants.RequestedAxis,
 
 /// Known dimensions represent dimensions (width/height) which should be taken as fixed when performing layout.
 /// For example, if known_dimensions.width is set to Some(WIDTH) then this means something like:
@@ -26,20 +28,94 @@ known_dimensions: mod.CSSMaybePoint,
 parent_size: mod.CSSMaybePoint,
 /// Available space represents an amount of space to layout into, and is used as a soft constraint
 /// Specific to CSS Block layout. Used for correctly computing margin collapsing. You probably want to set this to `Line::FALSE`.
-vertical_margins_are_collapsible: mod.LineOf(bool),
+vertical_margins_are_collapsible: mod.Line(bool),
 
-pub const ComputeMode = enum {
-    size,
-    layout,
-};
+// pub const AvailableSpace = union(enum) {
+//     definite: f32,
+//     min_content: void,
+//     max_content: void,
 
-pub const AvailableSpace = union(enum) {
-    definite: f32,
-    min_content,
-    max_content,
-};
+//     pub fn from(f: f32) AvailableSpace {
+//         return .{ .definite = f };
+//     }
 
-pub const AvailableSpacePoint = mod.PointOf(AvailableSpace);
+//     pub fn intoOption(self: AvailableSpace) ?f32 {
+//         switch (self) {
+//             .definite => return self.definite,
+//             else => return null,
+//         }
+//     }
+//     pub fn maybeAddIfDefinite(self: AvailableSpace, other: anytype) AvailableSpace {
+//         switch (self) {
+//             .definite => |v| return .{ .definite = math.maybeAdd(v, other) },
+//             else => return self,
+//         }
+//     }
+
+//     pub fn maybeSubtractIfDefinite(self: AvailableSpace, other: anytype) AvailableSpace {
+//         switch (self) {
+//             .definite => |v| return .{ .definite = math.maybeSub(v, other) },
+//             else => return self,
+//         }
+//     }
+
+//     pub fn maybeClamp(self: AvailableSpace, min: anytype, max: anytype) AvailableSpace {
+//         switch (self) {
+//             .definite => |v| return .{ .definite = math.maybeClamp(v, min, max) },
+//             else => return self,
+//         }
+//     }
+
+//     pub fn maybeMax(self: AvailableSpace, other: anytype) AvailableSpace {
+//         switch (self) {
+//             .definite => |v| return .{ .definite = math.maybeMax(v, other) },
+//             else => return self,
+//         }
+//     }
+//     pub fn maybeMin(self: AvailableSpace, other: anytype) AvailableSpace {
+//         switch (self) {
+//             .definite => |v| return .{ .definite = math.maybeMin(v, other) },
+//             else => return self,
+//         }
+//     }
+
+//     pub fn maybeSet(self: AvailableSpace, other: anytype) AvailableSpace {
+//         if (other) |v| {
+//             return .{ .definite = v };
+//         } else return self;
+//     }
+//     pub fn set(other: f32) AvailableSpace {
+//         return .{ .definite = other };
+//     }
+
+//     pub fn fromPoint(point: anytype) mod.PointOf(AvailableSpace) {
+//         if (@TypeOf(point) == mod.CSSPoint) {
+//             return .{
+//                 .x = .{ .definite = point.x },
+//                 .y = .{ .definite = point.y },
+//             };
+//         }
+//         return .{
+//             .x = if (point.x) |v| .{ .definite = v } else .max_content,
+//             .y = if (point.y) |v| .{ .definite = v } else .max_content,
+//         };
+//     }
+
+//     pub fn isRoughlyEqual(self: AvailableSpace, other: AvailableSpace) bool {
+//         switch (self) {
+//             .definite => |a| {
+//                 switch (other) {
+//                     .definite => |b| return @abs(a - b) < std.math.floatEps(f32),
+//                     else => return false,
+//                 }
+//             },
+//             else => return @intFromEnum(self) == @intFromEnum(other),
+//         }
+//     }
+//     pub const MAX_CONTENT: AvailableSpace = .{ .x = .max_content, .y = .max_content };
+//     pub const MIN_CONTENT: AvailableSpace = .{ .x = .min_content, .y = .min_content };
+// };
+// pub const AvailableSpacePoint = mod.PointOf(AvailableSpace);
 pub const RunMode = enum {
     /// A full layout for this node and all children should be computed
     perform_layout,
@@ -48,12 +124,12 @@ pub const RunMode = enum {
     compute_size,
 };
 
-pub const SizingMode = enum {
-    /// Only content contributions should be taken into account
-    content_size,
-    /// Inherent size styles should be taken into account in addition to content contributions
-    inherent_size,
-};
+// pub const SizingMode = enum {
+//     /// Only content contributions should be taken into account
+//     content_size,
+//     /// Inherent size styles should be taken into account in addition to content contributions
+//     inherent_size,
+// };
 
 pub const RequestedAxis = enum {
     /// The horizontal axis

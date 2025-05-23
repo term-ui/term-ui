@@ -17,6 +17,8 @@ pub const FlexDirection = styles.flex_direction.FlexDirection;
 pub const FlexWrap = styles.flex_wrap.FlexWrap;
 pub const AlignItems = styles.align_items.AlignItems;
 pub const AlignContent = styles.align_content.AlignContent;
+pub const AlignSelf = styles.align_items.AlignItems;
+pub const JustifyContent = styles.align_content.AlignContent;
 pub const Number = styles.number.Number;
 pub const Angle = styles.angle.Angle;
 

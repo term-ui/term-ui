@@ -22,13 +22,6 @@ const styles = @import("../../styles/styles.zig");
 const with = @import("../utils/comptime.zig").with;
 const performChildLayout = @import("perform_child_layout.zig").performChildLayout;
 const computeContentSizeContribution = @import("compute_content_size_contribution.zig").computeContentSizeContribution;
-const ItemKind = union(enum) {
-    block: Node.NodeId,
-    inline_stream: Array(Node.NodeId),
-};
-const Item = union(enum) {
-    block: Node.NodeId,
-};
 
 const BlockItem = struct {
     node_id: Node.NodeId,
@@ -351,8 +344,7 @@ pub fn determineContentBasedContainerWidth(
 
         var width = known_dimensions.x orelse blk: {
             const item_x_margin_sum: f32 = item.margin.maybeResolve(available_space_width).orZero().sumHorizontal();
-            // switch (item.nodes) {
-            //     .block => |child| {
+
             const size_and_baselines = try performChildLayout(
                 allocator,
                 item.node_id,
@@ -367,26 +359,6 @@ pub fn determineContentBasedContainerWidth(
                 .{ .start = true, .end = true },
             );
             break :blk size_and_baselines.size.x + item_x_margin_sum;
-            //     },
-            //     .inline_stream => |nodes| {
-            //         // @panic("not implemented");
-            //         const size_and_baselines = try performInlineLayout(
-            //             allocator,
-            //             tree,
-            //             node_id,
-            //             nodes,
-            //             known_dimensions,
-            //             .{ .x = null, .y = null },
-            //             .{
-            //                 .x = available_space.x.maybeSubtractIfDefinite(item_x_margin_sum),
-            //                 .y = .min_content,
-            //             },
-            //             .inherent_size,
-            //             .{ .start = true, .end = true },
-            //         );
-            //         break :blk size_and_baselines.size.x + item_x_margin_sum;
-            //     },
-            // }
         };
         width = @max(width, item.padding_border_sum.x);
         max_child_width = @max(max_child_width, width);

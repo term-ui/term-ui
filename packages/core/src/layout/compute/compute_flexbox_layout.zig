@@ -14,7 +14,6 @@ const LayoutOutput = @import("compute_constants.zig").LayoutOutput;
 const Point = @import("../point.zig").Point;
 const Rect = @import("../rect.zig").Rect;
 
-const dumpStruct = @import("../utils/debug.zig").dumpStruct;
 const Line = @import("../line.zig");
 const measureChildSize = @import("measure_child_size.zig").measureChildSize;
 const computeChildLayout = @import("compute_child_layout.zig").computeChildLayout;
@@ -1497,9 +1496,9 @@ pub fn calculateCrossSize(
     if (flex_lines.items.len == 1 and
         dir.getCross(node_size) != null and
         (!constants.is_wrap or
-            constants.align_content == .stretch or
-            constants.align_content == .space_evenly or
-            constants.align_content == .space_around))
+        constants.align_content == .stretch or
+        constants.align_content == .space_evenly or
+        constants.align_content == .space_around))
     {
         const cross_axis_padding_border = dir.sumCrossAxis(constants.content_box_inset);
         const cross_min_size = dir.getCross(constants.min_size);
@@ -2376,53 +2375,3 @@ pub fn performAbsoluteLayoutOnAbsoluteChildren(
     }
     return content_size;
 }
-
-pub fn len(length: f32) Style.LengthPercentageAuto {
-    return .{ .length = length };
-}
-const test_allocator = std.testing.allocator;
-
-// test "computeFlexboxLayout" {
-//     const gpa = test_allocator;
-//     const block = Node.block;
-//     const compute_root_layout = @import("compute_root_layout.zig").compute_root_layout;
-
-//     var root = try block(gpa, .{
-//         .display = Style.Display.FLEX,
-//         .size = .{
-//             .x = .{ .length = 800 },
-//             .y = .{ .length = 600 },
-//         },
-//     }, .{
-//         try block(gpa, .{
-//             .display = Style.Display.FLEX,
-//             .size = .{
-//                 .x = .{ .length = 200 },
-//                 .y = .{ .length = 100 },
-//             },
-//         }, .{}),
-
-//         try block(gpa, .{
-//             .display = Style.Display.FLEX,
-//             .size = .{
-//                 .x = .{ .length = 200 },
-//                 .y = .{ .length = 100 },
-//             },
-//             .margin = .{
-//                 .left = .auto,
-//                 .top = .{ .length = 0 },
-//                 .bottom = .{ .length = 0 },
-//                 .right = .{ .length = 0 },
-//             },
-//         }, .{"hi"}),
-//     });
-//     defer root.deinit();
-//     var arena = std.heap.ArenaAllocator.init(test_allocator);
-//     defer arena.deinit();
-//     try compute_root_layout(arena.allocator(), &root, .{
-//         .x = .max_content,
-//         .y = .max_content,
-//     });
-
-//     std.debug.print("{any}\n", .{root.fmt()});
-// }

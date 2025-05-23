@@ -45,6 +45,16 @@ pub const StyleProperty = enum {
     position,
     overflow,
     scrollbar_width,
+    flex_direction,
+    flex_wrap,
+    flex_basis,
+    flex_grow,
+    flex_shrink,
+    align_items,
+    align_self,
+    justify_content,
+    align_content,
+    gap,
 };
 const styles = @import("../../styles/styles.zig");
 const Styles = @import("../../tree/Style.zig");
@@ -134,7 +144,40 @@ pub fn getStyleValue(self: *Self, T: type, l_node_id: mod.LayoutNode.Id, comptim
             return if (maybe_node_styles) |node_styles| node_styles.aspect_ratio else @as(?f32, null);
         },
         .scrollbar_width => {
-            return if (maybe_node_styles) |node_styles| node_styles.scrollbar_width;
+            return if (maybe_node_styles) |node_styles| node_styles.scrollbar_width else @as(f32, 0);
+        },
+        .flex_direction => {
+            return if (maybe_node_styles) |node_styles| node_styles.flex_direction else styles.flex_direction.FlexDirection.row;
+        },
+        .flex_wrap => {
+            return if (maybe_node_styles) |node_styles| node_styles.flex_wrap else styles.flex_wrap.FlexWrap.no_wrap;
+        },
+        .flex_basis => {
+            return if (maybe_node_styles) |node_styles| node_styles.flex_basis else styles.length_percentage_auto.LengthPercentageAuto.auto;
+        },
+        .flex_grow => {
+            return if (maybe_node_styles) |node_styles| node_styles.flex_grow else @as(f32, 0);
+        },
+        .flex_shrink => {
+            return if (maybe_node_styles) |node_styles| node_styles.flex_shrink else @as(f32, 1);
+        },
+        .align_items => {
+            return if (maybe_node_styles) |node_styles| node_styles.align_items orelse .stretch else .stretch;
+        },
+        .align_self => {
+            return if (maybe_node_styles) |node_styles| node_styles.align_self orelse .auto else .auto;
+        },
+        .justify_content => {
+            return if (maybe_node_styles) |node_styles| node_styles.justify_content orelse .flex_start else .flex_start;
+        },
+        .align_content => {
+            return if (maybe_node_styles) |node_styles| node_styles.align_content orelse .stretch else .stretch;
+        },
+        .gap => {
+            return if (maybe_node_styles) |node_styles| node_styles.gap else css_types.LengthPercentagePoint{
+                .x = .{ .length = 0 },
+                .y = .{ .length = 0 },
+            };
         },
     }
 }

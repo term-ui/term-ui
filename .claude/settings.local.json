@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(zig build:*)",
+      "Bash(./zig-out/bin/test)",
+      "Bash(grep:*)"
+    ],
+    "deny": []
+  }
+}
