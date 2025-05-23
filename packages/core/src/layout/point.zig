@@ -7,6 +7,11 @@ const Style = @import("../tree/Style.zig");
 const styles = @import("../styles/styles.zig");
 const expect = std.testing.expect;
 
+pub const CSSPoint = Point(f32);
+pub const CSSMaybePoint = Point(?f32);
+
+pub const Of = Point;
+
 pub fn Point(comptime T: type) type {
     return struct {
         x: T,

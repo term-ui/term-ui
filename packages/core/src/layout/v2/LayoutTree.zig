@@ -3,6 +3,8 @@ const DocNodeId = @import("../../tree/Node.zig").NodeId;
 const DocTree = @import("../../tree/Tree.zig");
 const Array = std.ArrayListUnmanaged;
 const HashMap = std.AutoHashMapUnmanaged;
+const mod = @import("mod.zig");
+
 const docFromXml = @import("./doc-from-xml.zig").docFromXml;
 
 nodes: HashMap(LayoutNode.Id, LayoutNode) = .{},
@@ -22,14 +24,14 @@ pub fn deinit(self: *Self) void {
     self.nodes.deinit(self.allocator);
 }
 
-pub fn createNode(self: *Self, data: LayoutNode.Data) !LayoutNode.Id {
+pub fn createNode(self: *Self, data: LayoutNode.Data, ref: DocRef) !LayoutNode.Id {
     const id = self.node_count;
-    try self.nodes.put(self.allocator, id, LayoutNode{ .id = id, .data = data });
+    try self.nodes.put(self.allocator, id, LayoutNode{ .id = id, .data = data, .ref = ref });
     self.node_count += 1;
     return id;
 }
-pub fn createTextNode(self: *Self, contents: []const u8) !LayoutNode.Id {
-    const node_id = try self.createNode(.{ .text_node = .{} });
+pub fn createTextNode(self: *Self, contents: []const u8, ref: DocRef) !LayoutNode.Id {
+    const node_id = try self.createNode(.{ .text_node = .{} }, ref);
     var node = self.getNodePtr(node_id);
     try node.data.text_node.contents.appendSlice(self.allocator, contents);
     return node_id;
@@ -43,15 +45,23 @@ pub fn appendNode(self: *Self, parent_id: LayoutNode.Id, child_id: LayoutNode.Id
         else => return error.InvalidParent,
     };
     try list.append(self.allocator, child_id);
+    try self.setParent(child_id, parent_id);
 }
+pub fn setParent(self: *Self, child_id: LayoutNode.Id, parent_id: ?LayoutNode.Id) !void {
+    const child = self.getNodePtr(child_id);
+    child.parent = parent_id;
+}
+
 pub fn getNodePtr(self: *Self, id: LayoutNode.Id) *LayoutNode {
     return self.nodes.getPtr(id) orelse std.debug.panic("LayoutTree: Node {d} not found", .{id});
 }
 
 pub const LayoutNode = struct {
     id: Id,
+    ref: DocRef,
     parent: ?Id = null,
     data: Data,
+    box: mod.Box = .{},
     pub const Id = u32;
     pub const Data = union(enum) {
         text_node: TextNode,
@@ -77,7 +87,6 @@ pub const TextNode = struct {
 };
 
 pub const InlineNode = struct {
-    ref: DocRef,
     is_atomic: bool = false,
     children: Array(LayoutNode.Id) = .{},
     continuation: ?LayoutNode.Id = null,
@@ -93,7 +102,6 @@ pub const DocRef = union(enum) {
 };
 
 pub const BlockContainerNode = struct {
-    ref: DocRef,
     children: Array(LayoutNode.Id) = .{},
     pub fn deinit(self: *BlockContainerNode, allocator: std.mem.Allocator) void {
         self.children.deinit(allocator);
@@ -106,7 +114,6 @@ pub const BlockContainerNode = struct {
 /// The same as a block container, but all children are inline, which enables inline formatting context.
 /// this node also holds the LineBoxes
 pub const InlineContainerNode = struct {
-    ref: DocRef,
     children: Array(LayoutNode.Id) = .{},
     line_boxes: Array(LineBox) = .{},
     continuation: ?LayoutNode.Id = null,
@@ -196,13 +203,13 @@ const MixedContextBuilder = struct {
         return if (self.stack.items.len > 0) self.stack.items[self.stack.items.len - 1] else self.current_container_id;
     }
     pub fn createBlockContainer(self: *MixedContextBuilder) !LayoutNode.Id {
-        const id = try self.layout_tree.createNode(.{ .block_container_node = .{ .ref = .anonymous } });
+        const id = try self.layout_tree.createNode(.{ .block_container_node = .{} }, .anonymous);
         try self.layout_tree.appendNode(self.root_container_id, id);
         self.current_container_id = id;
         return id;
     }
     pub fn createInlineContainer(self: *MixedContextBuilder, parent_id: LayoutNode.Id) !LayoutNode.Id {
-        const id = try self.layout_tree.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
+        const id = try self.layout_tree.createNode(.{ .inline_container_node = .{} }, .anonymous);
         try self.layout_tree.appendNode(parent_id, id);
         self.current_container_id = id;
         return id;
@@ -220,7 +227,7 @@ const MixedContextBuilder = struct {
             var node = self.layout_tree.getNodePtr(id);
             switch (node.data) {
                 .inline_container_node => {
-                    const clone_inline_container_node_id = try self.layout_tree.createNode(.{ .inline_container_node = .{ .ref = .anonymous } });
+                    const clone_inline_container_node_id = try self.layout_tree.createNode(.{ .inline_container_node = .{} }, .anonymous);
                     node = self.layout_tree.getNodePtr(id);
                     node.data.inline_container_node.continuation = clone_inline_container_node_id;
                     const clone_node = self.layout_tree.getNodePtr(clone_inline_container_node_id);
@@ -231,7 +238,7 @@ const MixedContextBuilder = struct {
                     self.stack.items[i] = clone_inline_container_node_id;
                 },
                 .inline_node => {
-                    const clone_inline_node_id = try self.layout_tree.createNode(.{ .inline_node = .{ .ref = .{ .doc_node = node.data.inline_node.ref.doc_node } } });
+                    const clone_inline_node_id = try self.layout_tree.createNode(.{ .inline_node = .{} }, node.ref);
                     node = self.layout_tree.getNodePtr(id);
                     node.data.inline_node.continuation = clone_inline_node_id;
                     const clone_node = self.layout_tree.getNodePtr(clone_inline_node_id);
@@ -256,7 +263,7 @@ const MixedContextBuilder = struct {
         const kind = self.doc_tree.getNodeKind(node_id);
         if (kind == .text) {
             const text = self.doc_tree.getText(node_id).bytes.items;
-            const id = try self.layout_tree.createTextNode(text);
+            const id = try self.layout_tree.createTextNode(text, .{ .doc_node = node_id });
             try self.appendNode(id);
 
             // return id;
@@ -268,7 +275,7 @@ const MixedContextBuilder = struct {
             return;
         }
         if (isInlineFlow(self.doc_tree, node_id)) {
-            const id = try self.layout_tree.createNode(.{ .inline_node = .{ .ref = .{ .doc_node = node_id } } });
+            const id = try self.layout_tree.createNode(.{ .inline_node = .{} }, .{ .doc_node = node_id });
             try self.layout_tree.appendNode(self.getCurrentParent(), id);
             // push to the stack
             try self.stack.append(self.allocator, id);
@@ -300,7 +307,7 @@ fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) BuildError!LayoutNode.
     // 1. Text DOM nodes map directly to layout text nodes.
     if (kind == .text) {
         const text = tree.getText(node_id).bytes.items;
-        const id = try self.createTextNode(text);
+        const id = try self.createTextNode(text, .{ .doc_node = node_id });
         return id;
     }
     const style = tree.getStyle(node_id);
@@ -310,7 +317,7 @@ fn build(self: *Self, tree: *DocTree, node_id: DocNodeId) BuildError!LayoutNode.
 
     // 2. Atomic inline elements produce an `InlineNode`, right now we dont have other types of atomic inline elements besides inline-block or inline-flex
     if (isInlineFlow(tree, node_id)) {
-        const id = try self.createNode(.{ .inline_node = .{ .ref = .{ .doc_node = node_id } } });
+        const id = try self.createNode(.{ .inline_node = .{} }, .{ .doc_node = node_id });
         for (tree.getNodeChildren(node_id)) |child| {
             if (isDisplayNone(tree, child)) continue;
             const child_layout_node_id = try self.build(tree, child);
@@ -330,7 +337,7 @@ pub fn buildInsideBlock(self: *Self, tree: *DocTree, node_id: DocNodeId) !Layout
         }
     }
     if (only_inline_children) {
-        const inline_container_id = try self.createNode(.{ .inline_container_node = .{ .ref = .{ .doc_node = node_id } } });
+        const inline_container_id = try self.createNode(.{ .inline_container_node = .{} }, .{ .doc_node = node_id });
         for (children) |child| {
             if (isDisplayNone(tree, child)) continue;
             const child_layout_node_id = try self.build(tree, child);
@@ -339,7 +346,7 @@ pub fn buildInsideBlock(self: *Self, tree: *DocTree, node_id: DocNodeId) !Layout
         return inline_container_id;
     }
 
-    const container_id = try self.createNode(.{ .block_container_node = .{ .ref = .{ .doc_node = node_id } } });
+    const container_id = try self.createNode(.{ .block_container_node = .{} }, .{ .doc_node = node_id });
     var mixed_context_builder = try MixedContextBuilder.init(self.allocator, self, tree, container_id);
     defer mixed_context_builder.deinit();
     try mixed_context_builder.build();
@@ -353,7 +360,8 @@ fn writeDocRef(writer: std.io.AnyWriter, ref: DocRef) !void {
     }
 }
 
-fn getChildren(node: *LayoutNode) []const LayoutNode.Id {
+pub fn getChildren(self: *Self, node_id: LayoutNode.Id) []const LayoutNode.Id {
+    const node = self.getNodePtr(node_id);
     return switch (node.data) {
         .inline_node => |*n| n.children.items,
         .block_container_node => |*n| n.children.items,
@@ -393,25 +401,25 @@ fn printNodeInternal(self: *Self, node_id: LayoutNode.Id, writer: std.io.AnyWrit
             }
 
             try writer.print(" ref=", .{});
-            try writeDocRef(writer, inline_node.ref);
-            try writer.print(" children={{{d}}}]", .{inline_node.children.items.len});
+            try writeDocRef(writer, node.ref);
+            try writer.print(" children={{{d}}} box={{{any}}}]", .{ inline_node.children.items.len, node.box });
         },
         .block_container_node => |block| {
             try writer.print("[{s} #{d} ref=", .{ @tagName(node.data), node.id });
-            try writeDocRef(writer, block.ref);
+            try writeDocRef(writer, node.ref);
 
-            try writer.print(" children={{{d}}}]", .{block.children.items.len});
+            try writer.print(" children={{{d}}} box={{{any}}}]", .{ block.children.items.len, node.box });
         },
         .inline_container_node => |container| {
             try writer.print("[{s} #{d} ref=", .{ @tagName(node.data), node.id });
-            try writeDocRef(writer, container.ref);
+            try writeDocRef(writer, node.ref);
             if (container.continuationOf) |continuation_of| {
                 try writer.print(" continuationOf={{#{d}}}", .{continuation_of});
             }
             if (container.continuation) |continuation| {
                 try writer.print(" continuation={{#{d}}}", .{continuation});
             }
-            try writer.print(" children={{{d}}} lines={{{d}}}]", .{ container.children.items.len, container.line_boxes.items.len });
+            try writer.print(" children={{{d}}} lines={{{d}}} box={{{any}}}]", .{ container.children.items.len, container.line_boxes.items.len, node.box });
         },
     }
 
@@ -429,7 +437,7 @@ fn printNodeInternal(self: *Self, node_id: LayoutNode.Id, writer: std.io.AnyWrit
     }
     const new_prefix = new_prefix_buf[0..new_prefix_len];
 
-    const children = getChildren(node);
+    const children = self.getChildren(node_id);
     for (children, 0..) |child, idx| {
         const last_child = idx == children.len - 1;
         try self.printNodeInternal(child, writer, new_prefix, false, last_child);
@@ -472,8 +480,8 @@ test "LayoutTree" {
         \\  zzz
         \\</span>
     ,
-        \\[inline_container_node #0 ref={doc#0} children={2} lines={0}]
-        \\├── [inline_node #1 ref={doc#1} children={2}]
+        \\[inline_container_node #0 ref={doc#0} children={2} lines={0} box={[w: 0 h: 0]}]
+        \\├── [inline_node #1 ref={doc#1} children={2} box={[w: 0 h: 0]}]
         \\│   ├── [text_node #2] "abc"
         \\│   └── [text_node #3] "def"
         \\└── [text_node #4] "zzz"
@@ -511,18 +519,18 @@ test "deep formatting context break" {
         \\</i>
         \\
     ,
-        \\[block_container_node #0 ref={doc#0} children={3}]
-        \\├── [inline_container_node #2 ref={anon} children={2} lines={0}]
+        \\[block_container_node #0 ref={doc#0} children={3} box={[w: 0 h: 0]}]
+        \\├── [inline_container_node #2 ref={anon} children={2} lines={0} box={[w: 0 h: 0]}]
         \\│   ├── [text_node #1] "Italic only"
-        \\│   └── [inline_node #3 continuation={#12} ref={doc#2} children={1}]
+        \\│   └── [inline_node #3 continuation={#12} ref={doc#2} children={1} box={[w: 0 h: 0]}]
         \\│       └── [text_node #4] "italic and bold"
-        \\├── [block_container_node #5 ref={anon} children={2}]
-        \\│   ├── [inline_container_node #6 ref={doc#4} children={1} lines={0}]
+        \\├── [block_container_node #5 ref={anon} children={2} box={[w: 0 h: 0]}]
+        \\│   ├── [inline_container_node #6 ref={doc#4} children={1} lines={0} box={[w: 0 h: 0]}]
         \\│   │   └── [text_node #7] "Wow, a block!"
-        \\│   └── [inline_container_node #8 ref={doc#6} children={1} lines={0}]
+        \\│   └── [inline_container_node #8 ref={doc#6} children={1} lines={0} box={[w: 0 h: 0]}]
         \\│       └── [text_node #9] "Wow, another block!"
-        \\└── [inline_container_node #11 ref={anon} children={2} lines={0}]
-        \\    ├── [inline_node #12 continuationOf={#3} ref={doc#2} children={1}]
+        \\└── [inline_container_node #11 ref={anon} children={2} lines={0} box={[w: 0 h: 0]}]
+        \\    ├── [inline_node #12 continuationOf={#3} ref={doc#2} children={1} box={[w: 0 h: 0]}]
         \\    │   └── [text_node #10] "More italic and bold text"
         \\    └── [text_node #13] "More italic text"
         \\
@@ -543,20 +551,20 @@ test "deep formatting context break" {
         \\</i>
         \\
     ,
-        \\[block_container_node #0 ref={doc#0} children={3}]
-        \\├── [inline_container_node #2 ref={anon} children={2} lines={0}]
+        \\[block_container_node #0 ref={doc#0} children={3} box={[w: 0 h: 0]}]
+        \\├── [inline_container_node #2 ref={anon} children={2} lines={0} box={[w: 0 h: 0]}]
         \\│   ├── [text_node #1] "Italic only"
-        \\│   └── [inline_node #3 continuation={#13} ref={doc#2} children={2}]
+        \\│   └── [inline_node #3 continuation={#13} ref={doc#2} children={2} box={[w: 0 h: 0]}]
         \\│       ├── [text_node #4] "italic and bold"
-        \\│       └── [inline_node #8 continuation={#14} ref={doc#6} children={0}]
-        \\├── [block_container_node #5 ref={anon} children={2}]
-        \\│   ├── [inline_container_node #6 ref={doc#4} children={1} lines={0}]
+        \\│       └── [inline_node #8 continuation={#14} ref={doc#6} children={0} box={[w: 0 h: 0]}]
+        \\├── [block_container_node #5 ref={anon} children={2} box={[w: 0 h: 0]}]
+        \\│   ├── [inline_container_node #6 ref={doc#4} children={1} lines={0} box={[w: 0 h: 0]}]
         \\│   │   └── [text_node #7] "Wow, a block!"
-        \\│   └── [inline_container_node #9 ref={doc#7} children={1} lines={0}]
+        \\│   └── [inline_container_node #9 ref={doc#7} children={1} lines={0} box={[w: 0 h: 0]}]
         \\│       └── [text_node #10] "Wow, another block!"
-        \\└── [inline_container_node #12 ref={anon} children={2} lines={0}]
-        \\    ├── [inline_node #13 continuationOf={#3} ref={doc#2} children={1}]
-        \\    │   └── [inline_node #14 continuationOf={#8} ref={doc#6} children={1}]
+        \\└── [inline_container_node #12 ref={anon} children={2} lines={0} box={[w: 0 h: 0]}]
+        \\    ├── [inline_node #13 continuationOf={#3} ref={doc#2} children={1} box={[w: 0 h: 0]}]
+        \\    │   └── [inline_node #14 continuationOf={#8} ref={doc#6} children={1} box={[w: 0 h: 0]}]
         \\    │       └── [text_node #11] "More italic and bold text"
         \\    └── [text_node #15] "More italic text"
         \\

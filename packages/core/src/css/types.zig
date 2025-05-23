@@ -12,6 +12,7 @@ pub const LengthPercentage = styles.length_percentage.LengthPercentage;
 pub const LengthPercentageAuto = styles.length_percentage_auto.LengthPercentageAuto;
 pub const Position = styles.position.Position;
 pub const Overflow = styles.overflow.Overflow;
+
 pub const FlexDirection = styles.flex_direction.FlexDirection;
 pub const FlexWrap = styles.flex_wrap.FlexWrap;
 pub const AlignItems = styles.align_items.AlignItems;
@@ -54,3 +55,4 @@ pub const LengthPercentagePoint = Point(LengthPercentage);
 pub const LengthPercentageRect = Rect(LengthPercentage);
 pub const LengthPoint = Point(Length);
 pub const LengthRect = Rect(Length);
+pub const OverflowPoint = Point(Overflow);

@@ -106,10 +106,3 @@ fn nodeFromXmlElement(tree: *Tree, element: *xml.Element, options: Options) Tree
     }
     return node_id;
 }
-test "treeFromXml" {
-    // Basic sanity test to print the generated tree to stderr during testing.
-    var tree = try docFromXml(std.testing.allocator, "<div>Hello, world!</div>", .{});
-    defer tree.deinit();
-    const stderr = std.io.getStdErr().writer().any();
-    try tree.print(stderr);
-}
