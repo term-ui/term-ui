@@ -72,11 +72,11 @@ pub fn computeBlockLayout(allocator: std.mem.Allocator, node_id: Node.NodeId, tr
 
     const aspect_ratio = style.aspect_ratio;
     const margin = style.margin.maybeResolve(parent_size.x).orZero();
-    const min_size = style.min_size.maybeResolve(parent_size).maybeApplyAspectRatio(aspect_ratio);
-    const max_size = style.max_size.maybeResolve(parent_size).maybeApplyAspectRatio(aspect_ratio);
     const padding = style.padding.maybeResolve(parent_size.x).orZero();
     const border = style.border.maybeResolve(parent_size.x).orZero();
     const padding_border_size = padding.add(border).sumAxes();
+    const min_size = style.min_size.maybeResolve(parent_size).maybeApplyAspectRatio(aspect_ratio);
+    const max_size = style.max_size.maybeResolve(parent_size).maybeApplyAspectRatio(aspect_ratio);
     const clamped_style_size = if (inputs.sizing_mode == .inherent_size)
         style.size.maybeResolve(parent_size).maybeApplyAspectRatio(aspect_ratio).maybeClamp(min_size, max_size)
     else
@@ -299,53 +299,6 @@ pub fn generateItemList(allocator: std.mem.Allocator, node_id: Node.NodeId, tree
         const child_id = children[i];
 
         const style = tree.getComputedStyle(child_id);
-        // if (child.isInline()) {
-        // var inline_stream = Array(Node.NodeId).init(allocator);
-
-        // try inline_stream.append(child_id);
-        // while (i < children.len) {
-        //     const next_child_id = children[i];
-        //     var next_child = tree.getNode(next_child_id);
-        //     std.debug.print("inline-stream {d} {}\n", .{ i, next_child.isInline() });
-        //     if (!next_child.isInline()) {
-        //         break;
-        //     }
-        //     i += 1;
-        //     try inline_stream.append(next_child_id);
-        // }
-
-        // const rect_zero = Rect(LengthPercentageAuto){
-        //     .top = .{ .length = 0 },
-        //     .left = .{ .length = 0 },
-        //     .right = .{ .length = 0 },
-        //     .bottom = .{ .length = 0 },
-        // };
-        // try items.append(.{
-        //     .nodes = .{ .inline_stream = inline_stream },
-        //     .order = @intCast(order),
-        //     .size = .{ .x = null, .y = null },
-        //     .min_size = .{ .x = null, .y = null },
-        //     .max_size = .{ .x = null, .y = null },
-
-        //     .overflow = .{ .x = .visible, .y = .visible },
-        //     .scrollbar_width = 0,
-        //     .position = .relative,
-        //     .inset = rect_zero,
-        //     .margin = rect_zero,
-        //     .padding = .{ .top = 0, .left = 0, .right = 0, .bottom = 0 },
-        //     .border = .{ .top = 0, .left = 0, .right = 0, .bottom = 0 },
-        //     .padding_border_sum = .{ .x = 0, .y = 0 },
-
-        //     .computed_size = .{ .x = 0, .y = 0 },
-        //     .static_position = .{ .x = 0, .y = 0 },
-        //     .can_be_collapsed_through = false,
-        // });
-
-        // order += 1;
-
-        //     continue;
-        // }
-
         const aspect_ratio = style.aspect_ratio;
 
         const padding = style.padding.maybeResolve(nodeInnerSize.x).orZero();

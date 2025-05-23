@@ -1,3 +1,7 @@
+pub const CSSLine = Line(f32);
+pub const CSSMaybeLine = Line(?f32);
+pub const Of = Line;
+
 pub fn Line(comptime T: type) type {
     return struct {
         start: T,

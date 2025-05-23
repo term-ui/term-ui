@@ -43,6 +43,7 @@ pub const StyleProperty = enum {
     display,
     position,
     overflow,
+    scrollbar_width,
 };
 const styles = @import("../../styles/styles.zig");
 const Styles = @import("../../tree/Style.zig");
@@ -130,6 +131,9 @@ pub fn getStyleValue(self: *Self, T: type, l_node_id: mod.LayoutNode.Id, comptim
         },
         .aspect_ratio => {
             return if (maybe_node_styles) |node_styles| node_styles.aspect_ratio else @as(?f32, null);
+        },
+        .scrollbar_width => {
+            return if (maybe_node_styles) |node_styles| node_styles.scrollbar_width;
         },
     }
 }

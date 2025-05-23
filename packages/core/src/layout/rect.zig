@@ -3,6 +3,9 @@ const ConcreteTypeOf = @import("utils/comptime.zig").ConcreteTypeOf;
 const Point = @import("point.zig").Point;
 const Maybe = @import("utils/Maybe.zig");
 const MemberType = @import("utils/comptime.zig").MemberType;
+pub const CSSRect = Rect(f32);
+pub const CSSMaybeRect = Rect(?f32);
+pub const Of = Rect;
 
 pub fn Rect(comptime T: type) type {
     return struct {
