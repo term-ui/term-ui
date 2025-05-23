@@ -8,6 +8,7 @@ const std = @import("std");
 
 layout_tree: *LayoutTree,
 doc_tree: *DocTree,
+allocator: std.mem.Allocator,
 
 pub fn info(self: *Self, l_node_id: mod.LayoutNode.Id, comptime format: []const u8, args: anytype) void {
     const writer = std.io.getStdErr().writer().any();
