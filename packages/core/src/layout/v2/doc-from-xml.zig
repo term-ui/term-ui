@@ -4,6 +4,7 @@
 const xml = @import("../../xml.zig");
 const std = @import("std");
 const Tree = @import("../../tree/Tree.zig");
+const s = @import("../../styles/styles.zig");
 
 /// Simple configuration options used when converting XML into a test DOM tree.
 pub const Options = struct {
@@ -102,6 +103,40 @@ fn nodeFromXmlElement(tree: *Tree, element: *xml.Element, options: Options) Tree
                 }
                 _ = try tree.appendChild(node_id, child_id);
             },
+        }
+    }
+
+    // Parse simple inline attributes for styles, scrolling and selection.
+    for (element.attributes) |attr| {
+        if (std.mem.eql(u8, attr.name, "style")) {
+            try s.parseStyleString(tree, node_id, attr.value);
+            continue;
+        }
+        if (std.mem.eql(u8, attr.name, "scroll-y")) {
+            tree.getNode(node_id).scroll_offset.y = std.fmt.parseFloat(f32, attr.value) catch unreachable;
+            continue;
+        }
+        if (std.mem.eql(u8, attr.name, "scroll-x")) {
+            tree.getNode(node_id).scroll_offset.x = std.fmt.parseFloat(f32, attr.value) catch unreachable;
+            continue;
+        }
+        if (std.mem.eql(u8, attr.name, "selectionStart")) {
+            const offset: u32 = try std.fmt.parseInt(u32, attr.value, 10);
+            if (tree.getFirstSelection()) |selection| {
+                try selection.setAnchor(tree, .{ .node_id = node_id, .offset = offset });
+            } else {
+                _ = try tree.createSelection(.{ .node_id = node_id, .offset = offset }, null);
+            }
+            continue;
+        }
+        if (std.mem.eql(u8, attr.name, "selectionEnd")) {
+            const offset: u32 = try std.fmt.parseInt(u32, attr.value, 10);
+            if (tree.getFirstSelection()) |selection| {
+                try selection.setFocus(tree, .{ .node_id = node_id, .offset = offset });
+            } else {
+                _ = try tree.createSelection(.{ .node_id = node_id, .offset = offset }, null);
+            }
+            continue;
         }
     }
     return node_id;
