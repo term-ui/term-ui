@@ -1,38 +1,8 @@
 /// adapted from https://github.com/dcov/unicode/blob/ca91ab4b55ed0999e2801fc5f8250ec960ff5d54/src/ReverseUtf8Iterator.zig
 const std = @import("std");
-const db = @import("db.zig");
 const lookups = @import("lookups.zig");
 const ReverseUtf8Iterator = @import("ReverseUtf8Iterator.zig");
-
-const codepoint = struct {
-    pub fn getLineBreak(c: u21) lookups.LineBreak {
-        return db.getValue(lookups.LineBreak, c);
-    }
-    pub fn getCategory(c: u21) lookups.GeneralCategory {
-        return db.getValue(lookups.GeneralCategory, c);
-    }
-    pub fn getEastAsianWidth(c: u21) db.EastAsianWidth {
-        return db.getValue(db.EastAsianWidth, c);
-    }
-    pub fn isEmoji(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiIndex, c);
-    }
-    pub fn isEmojiPresentation(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiPresentationIndex, c);
-    }
-    pub fn isEmojiModifier(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiModifierIndex, c);
-    }
-    pub fn isEmojiModifierBase(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiModifierBaseIndex, c);
-    }
-    pub fn isEmojiComponent(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiComponentIndex, c);
-    }
-    pub fn isExtendedPictographic(c: u21) bool {
-        return db.getBoolValue(lookups.ExtendedPictographicIndex, c);
-    }
-};
+const codepoint = @import("Codepoint.zig").codepoint;
 
 str: []const u8,
 i: usize,
