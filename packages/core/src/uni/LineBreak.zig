@@ -42,6 +42,7 @@ cm_base: ?struct {
     code_point: u21,
     prop: lookups.LineBreak,
 },
+emit_eof_break: bool = true,
 
 const Context = enum {
     zw_sp,
@@ -58,6 +59,12 @@ pub const Break = struct {
     mandatory: bool,
     i: usize,
 };
+/// FIXME: This class is not really designed to consume text streams so we use this method to hack it.
+/// for it to work, emit_eof_break must be false and the new buffer must start exactly like the old.
+/// We may rewrite it to handle streams in the future but that should do for now.
+pub fn setBuffer(self: *Self, str: []const u8) void {
+    self.str = str;
+}
 
 pub fn init(str: []const u8) !Self {
     if (!std.unicode.utf8ValidateSlice(str)) {
@@ -88,13 +95,18 @@ pub fn next(self: *Self) ?Break {
     self.context = .none;
 
     while (true) {
+        const i = self.i;
         self.i = iter.i;
 
         const after_code_point = if (iter.nextCodepoint()) |next_code_point| next_code_point else {
-            return Break{
-                .mandatory = true,
-                .i = self.i,
-            };
+            if (self.emit_eof_break) {
+                return Break{
+                    .mandatory = true,
+                    .i = self.i,
+                };
+            }
+            self.i = i;
+            return null;
         };
         const after = breakProp(after_code_point);
 

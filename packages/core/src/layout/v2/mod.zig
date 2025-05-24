@@ -9,7 +9,7 @@ pub const LayoutNode = LayoutTree.LayoutNode;
 pub const LayoutResult = @import("./LayoutResult.zig");
 pub const computeBlockLayout = @import("./block/computeBlockLayout.zig").computeBlockLayout;
 pub const computeFlexboxLayout = @import("./flex/computeFlexboxLayout.zig").computeFlexboxLayout;
-pub const computeInlineContextLayout = @import("./computeInlineContextLayout.zig").computeInlineContextLayout;
+pub const computeInlineContextLayout = @import("./block/computeInlineContextLayout.zig").computeInlineContextLayout;
 pub const docFromXml = @import("./doc-from-xml.zig").docFromXml;
 pub const computeChildLayout = @import("./computeChildLayout.zig").computeChildLayout;
 pub const performChildLayout = @import("./performChildLayout.zig").performChildLayout;
@@ -34,6 +34,10 @@ pub const CSSLine = @import("../line.zig").CSSLine;
 pub const CSSMaybeLine = @import("../line.zig").CSSMaybeLine;
 pub const LineOf = @import("../line.zig").Of;
 pub const Line = @import("../line.zig").Line;
+
+pub const LinesBuilder = @import("./text/LinesBuilder.zig");
+pub const LineBox = @import("./text/LineBox.zig");
+pub const LineBoxFragment = @import("./text/LineBoxFragment.zig");
 
 test {
     std.testing.refAllDecls(@This());

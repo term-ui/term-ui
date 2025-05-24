@@ -583,4 +583,5 @@ test {
     _ = @import("./uni/GraphemeBreak.zig");
     _ = @import("./tree/NodeIterator.zig");
     _ = @import("./layout/v2/mod.zig");
+    _ = @import("./uni/LineBreakStream.zig");
 }
