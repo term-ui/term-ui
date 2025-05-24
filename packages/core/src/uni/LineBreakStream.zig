@@ -1,38 +1,8 @@
 /// adapted from https://github.com/dcov/unicode/blob/ca91ab4b55ed0999e2801fc5f8250ec960ff5d54/src/ReverseUtf8Iterator.zig
 const std = @import("std");
-const db = @import("db.zig");
 const lookups = @import("lookups.zig");
 const ReverseUtf8Iterator = @import("ReverseUtf8Iterator.zig");
-
-const codepoint = struct {
-    pub fn getLineBreak(c: u21) lookups.LineBreak {
-        return db.getValue(lookups.LineBreak, c);
-    }
-    pub fn getCategory(c: u21) lookups.GeneralCategory {
-        return db.getValue(lookups.GeneralCategory, c);
-    }
-    pub fn getEastAsianWidth(c: u21) db.EastAsianWidth {
-        return db.getValue(db.EastAsianWidth, c);
-    }
-    pub fn isEmoji(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiIndex, c);
-    }
-    pub fn isEmojiPresentation(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiPresentationIndex, c);
-    }
-    pub fn isEmojiModifier(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiModifierIndex, c);
-    }
-    pub fn isEmojiModifierBase(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiModifierBaseIndex, c);
-    }
-    pub fn isEmojiComponent(c: u21) bool {
-        return db.getBoolValue(lookups.EmojiComponentIndex, c);
-    }
-    pub fn isExtendedPictographic(c: u21) bool {
-        return db.getBoolValue(lookups.ExtendedPictographicIndex, c);
-    }
-};
+const codepoint = @import("codepoint.zig");
 
 buffer: std.ArrayList(u8),
 i: usize,
@@ -65,7 +35,6 @@ pub fn append(self: *Self, data: []const u8) !void {
     }
     try self.buffer.appendSlice(data);
 }
-
 
 pub fn markStreamDone(self: *Self) void {
     self.emit_eof_break = true;
@@ -406,17 +375,17 @@ test "english text streaming" {
     try stream.append("Hello ");
     try stream.append("world! ");
     try stream.append("This is a test.");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should find break opportunities at spaces
     try testing.expect(breaks.items.len >= 3);
-    
+
     // Mark stream done and check for final break
     stream.markStreamDone();
     if (stream.next()) |final_break| {
@@ -432,14 +401,14 @@ test "english text with line breaks" {
     try stream.append("Line 1\n");
     try stream.append("Line 2\r\n");
     try stream.append("Line 3");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should find mandatory breaks at newlines
     try testing.expect(breaks.items.len >= 2);
     // Find mandatory breaks among all breaks
@@ -457,14 +426,14 @@ test "english text with spaces and punctuation" {
     try stream.append("Hello, ");
     try stream.append("world! ");
     try stream.append("How are you?");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should find optional breaks at spaces
     try testing.expect(breaks.items.len >= 2);
     for (breaks.items) |break_point| {
@@ -475,14 +444,14 @@ test "english text with spaces and punctuation" {
 test "initWithData compatibility" {
     var stream = try initWithData(test_allocator, "Hello world!");
     defer stream.deinit();
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should find break at space
     try testing.expect(breaks.items.len >= 1);
 }
@@ -490,9 +459,9 @@ test "initWithData compatibility" {
 test "empty stream" {
     var stream = init(test_allocator);
     defer stream.deinit();
-    
+
     try testing.expect(stream.next() == null);
-    
+
     stream.markStreamDone();
     try testing.expect(stream.next() == null);
 }
@@ -500,20 +469,20 @@ test "empty stream" {
 test "incremental append" {
     var stream = init(test_allocator);
     defer stream.deinit();
-    
+
     // Add text character by character
     const text = "Hello world!";
     for (text) |char| {
         try stream.append(&[_]u8{char});
     }
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should find break at space
     try testing.expect(breaks.items.len >= 1);
 }
@@ -526,14 +495,14 @@ test "asian characters - chinese text" {
     try stream.append("你好");
     try stream.append("世界");
     try stream.append("！");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // CJK characters should allow breaks between them
     try testing.expect(breaks.items.len >= 1);
 }
@@ -545,14 +514,14 @@ test "asian characters - japanese text with hiragana and kanji" {
     // Japanese text: "こんにちは世界" (Hello World)
     try stream.append("こんにちは");
     try stream.append("世界");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should allow breaks between hiragana and kanji
     try testing.expect(breaks.items.len >= 0);
 }
@@ -564,14 +533,14 @@ test "asian characters - korean text" {
     // Korean text: "안녕하세요" (Hello)
     try stream.append("안녕");
     try stream.append("하세요");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Korean syllables should allow breaks
     try testing.expect(breaks.items.len >= 0);
 }
@@ -583,14 +552,14 @@ test "asian characters - mixed ascii and cjk" {
     try stream.append("Hello ");
     try stream.append("你好 ");
     try stream.append("world");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should find breaks at spaces and between different scripts
     try testing.expect(breaks.items.len >= 2);
 }
@@ -602,14 +571,14 @@ test "emojis - basic emoji" {
     try stream.append("Hello ");
     try stream.append("😀");
     try stream.append(" world");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should find breaks at spaces but not break emoji
     try testing.expect(breaks.items.len >= 2);
 }
@@ -620,14 +589,14 @@ test "emojis - emoji with skin tone modifier" {
 
     try stream.append("👋🏽"); // Waving hand with medium skin tone
     try stream.append(" hello");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should not break emoji sequence with modifier
     try testing.expect(breaks.items.len >= 1);
 }
@@ -638,14 +607,14 @@ test "emojis - complex emoji sequence" {
 
     try stream.append("👨‍👩‍👧‍👦"); // Family emoji (man, woman, girl, boy)
     try stream.append(" family");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should not break complex emoji sequence
     try testing.expect(breaks.items.len >= 1);
 }
@@ -656,14 +625,14 @@ test "emojis - emoji with text presentation" {
 
     try stream.append("❤️"); // Red heart with variation selector
     try stream.append(" love");
-    
+
     var breaks = std.ArrayList(Break).init(test_allocator);
     defer breaks.deinit();
-    
+
     while (stream.next()) |break_point| {
         try breaks.append(break_point);
     }
-    
+
     // Should not break emoji with presentation selector
     try testing.expect(breaks.items.len >= 1);
 }
@@ -674,7 +643,7 @@ test "utf8 validation in append" {
 
     // Valid UTF-8
     try stream.append("Hello 世界");
-    
+
     // Invalid UTF-8 should return error
     const invalid_utf8 = [_]u8{ 0xFF, 0xFE, 0xFD };
     try testing.expectError(error.InvalidUtf8, stream.append(&invalid_utf8));

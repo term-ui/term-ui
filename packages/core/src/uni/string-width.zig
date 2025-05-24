@@ -1,6 +1,7 @@
 // Extracted from https://github.com/oven-sh/bun/blob/main/src/string_immutable.zig
 const std = @import("std");
 const assert = std.debug.assert;
+const codepoint = @import("codepoint.zig");
 
 pub inline fn wtf8ByteSequenceLengthWithInvalid(first_byte: u8) u3 {
     return switch (first_byte) {
@@ -618,23 +619,12 @@ pub fn isAmgiguousCodepointType(comptime T: type, cp: T) bool {
     };
 }
 
-pub fn visibleCodepointWidth(cp: u32, ambiguousAsWide: bool) u3 {
-    return visibleCodepointWidthType(u32, cp, ambiguousAsWide);
+pub fn visibleCodepointWidth(code_point: u32, ambiguousAsWide: bool) u3 {
+    return codepoint.visibleWidth32(code_point, ambiguousAsWide);
 }
 
-pub fn visibleCodepointWidthType(comptime T: type, cp: T, ambiguousAsWide: bool) u3 {
-    if (isZeroWidthCodepointType(T, cp)) {
-        return 0;
-    }
-
-    if (isFullWidthCodepointType(T, cp)) {
-        return 2;
-    }
-    if (ambiguousAsWide and isAmgiguousCodepointType(T, cp)) {
-        return 2;
-    }
-
-    return 1;
+pub fn visibleCodepointWidthType(comptime T: type, code_point: T, ambiguousAsWide: bool) u3 {
+    return codepoint.visibleWidth32(@as(u32, @intCast(code_point)), ambiguousAsWide);
 }
 
 pub const visible = struct {
@@ -763,7 +753,10 @@ pub const visible = struct {
         };
     };
 };
+
+pub const utf8Width = visible.width.utf8;
+pub const utf8WidthExcludingAnsiColors = visible.width.exclude_ansi_colors.utf8;
 test "string-width" {
-    const width = visible.width.exclude_ansi_colors.utf8("\x1b[31m😂️️️️️️\x1b[0m");
+    const width = utf8WidthExcludingAnsiColors("\x1b[31m😂️️️️️️\x1b[0m");
     try std.testing.expectEqual(width, 2);
 }
